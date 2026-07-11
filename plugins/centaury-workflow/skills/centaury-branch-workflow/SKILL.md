@@ -43,4 +43,12 @@ Primary branches are protected. Never edit, commit, push, force-push, or merge d
 - If incompatible and no safe resolution is evident, keep the pull request draft/unmerged and add a clear comment listing conflicts, failed checks, attempted fixes, and the decision needed.
 - If another pull request already performs the same work, link it, comment on the duplicate when appropriate, and do not merge this branch.
 
+## After merge
+
+1. Confirm GitHub reports the pull request state as `MERGED`; do not infer this from local history alone. Record its head branch, base branch, and `headRefOid` before deleting anything.
+2. Verify the head is not the base, default, `main`, `master`, or another protected branch. If the remote ref is absent because GitHub already deleted it, no remote deletion is needed.
+3. Delete the remote head atomically with `git push --force-with-lease=refs/heads/<branch>:<headRefOid> <remote> --delete <branch>`. This narrow lease authorizes deletion only while the remote ref still equals the pull request's `headRefOid`; never use it to force-update the branch. On a mismatch, stale lease, or unknown SHA, do not delete it. A repository's automatic GitHub head-branch deletion is also acceptable.
+4. If the local task branch remains, switch to another branch and run `git branch -d <branch>`. Never use `git branch -D` to bypass the merged check.
+5. Never delete an unmerged branch or a branch whose merge state is unknown. Treat cleanup failure separately from merge failure: keep the successful merge result, report the exact undeleted branch and error, and do not force deletion.
+
 Local hooks are a guardrail, not the authority. GitHub organization rulesets and branch protection are the final enforcement layer.
