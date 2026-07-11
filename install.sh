@@ -343,6 +343,47 @@ backup_file() {
   cp -a "$file" "$backup/${file#$HOME/}"
 }
 
+migrate_legacy_codex_roles() {
+  local role file state description tmp
+  for role in planner researcher reviewer; do
+    file="$CODEX_HOME/agents/$role.toml"
+    [[ -f "$file" ]] || continue
+    if ! state="$(python3 - "$file" <<'PY'
+import sys, tomllib
+with open(sys.argv[1], "rb") as handle:
+    role = tomllib.load(handle)
+name = role.get("name")
+if isinstance(name, str) and name.strip():
+    print("valid")
+else:
+    description = role.get("description")
+    print("missing-name" if isinstance(description, str) and description.strip() else "missing-both")
+PY
+)"; then
+      warn "Keeping malformed legacy Codex role unchanged: $file"
+      continue
+    fi
+    [[ "$state" != valid ]] || continue
+    case "$role" in
+      planner) description="Plans changes before implementation." ;;
+      researcher) description="Explores repositories and reports actionable findings." ;;
+      reviewer) description="Reviews diffs for concrete defects." ;;
+    esac
+    tmp="$file.aicli-ultimate.tmp"
+    {
+      printf 'name = "%s"\n' "$role"
+      [[ "$state" == missing-both ]] && printf 'description = "%s"\n' "$description"
+      awk -v state="$state" '
+        /^[[:space:]]*name[[:space:]]*=/ {next}
+        state == "missing-both" && /^[[:space:]]*description[[:space:]]*=/ {next}
+        {print}
+      ' "$file"
+    } >"$tmp"
+    mv "$tmp" "$file"
+    info "Repaired legacy Codex role: $file"
+  done
+}
+
 render_agents() {
   local source="$1" target="$2" caveman_rule="" ponytail_rule="" lsp_rule=""
   [[ "$CAVEMAN_ALWAYS" == 1 ]] && caveman_rule='- Keep Caveman output mode active: terse output with full technical substance. Disable only when the user says “stop caveman”.'
@@ -1051,6 +1092,11 @@ if [[ "$TARGET_CLAUDE" == 1 ]]; then
   done
   backup_file "$BIN_DIR/claude-ultimate-status" "$backup"
 fi
+if [[ "$TARGET_CODEX" == 1 ]]; then
+  for role in planner researcher reviewer; do
+    backup_file "$CODEX_HOME/agents/$role.toml" "$backup"
+  done
+fi
 if [[ "$TARGET_OPENCODE" == 1 || "$TARGET_OMP" == 1 ]]; then
   backup_skill_set "$HOME/.agents/skills" "$backup"
 fi
@@ -1113,6 +1159,7 @@ fi
 step "Configuring agents"
 if [[ "$TARGET_CODEX" == 1 ]]; then
   mkdir -p "$CODEX_HOME/agents" "$CODEX_HOME/themes"
+  migrate_legacy_codex_roles
   status_value='status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-remaining", "five-hour-limit", "weekly-limit"]'
   [[ "$STATUSLINE" == 1 ]] && status_value='# Native status line disabled; external Powerline wrapper is active.'
   [[ "$LSP" == 1 && "$BRIDGE_READY" == 1 ]] && lsp_enabled=true || lsp_enabled=false

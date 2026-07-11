@@ -50,7 +50,13 @@ for manifest in "$ROOT"/plugins/*/.codex-plugin/plugin.json; do
   python3 -m json.tool "$manifest" >/dev/null
 done
 
-mkdir -p "$TMP/home/.claude" "$TMP/home/.config/opencode" "$TMP/home/.gemini/antigravity-cli"
+mkdir -p "$TMP/home/.claude" "$TMP/home/.codex/agents" "$TMP/home/.config/opencode" "$TMP/home/.gemini/antigravity-cli"
+printf 'description = ""\nmodel = "test"\n' >"$TMP/home/.codex/agents/planner.toml"
+printf 'name = ""\ndescription = "Keep custom description."\n' \
+  >"$TMP/home/.codex/agents/researcher.toml"
+printf 'name = "custom-reviewer"\ndescription = "Keep valid role."\n' \
+  >"$TMP/home/.codex/agents/reviewer.toml"
+cp "$TMP/home/.codex/agents/reviewer.toml" "$TMP/reviewer-valid.toml"
 printf '{"custom":"preserved","statusLine":{"type":"command","command":"legacy-status"}}\n' \
   >"$TMP/home/.claude/settings.json"
 printf '{"plugin":["existing-plugin"]}\n' >"$TMP/home/.config/opencode/tui.json"
@@ -87,6 +93,19 @@ for role in planner researcher reviewer; do
   grep -q "^name = \"ultimate-$role\"$" "$TMP/home/.codex/agents/ultimate-$role.toml"
   grep -q '^description = ' "$TMP/home/.codex/agents/ultimate-$role.toml"
 done
+grep -q '^name = "planner"$' "$TMP/home/.codex/agents/planner.toml"
+grep -q '^description = "Plans changes before implementation."$' \
+  "$TMP/home/.codex/agents/planner.toml"
+grep -q '^name = "researcher"$' "$TMP/home/.codex/agents/researcher.toml"
+grep -q '^description = "Keep custom description."$' \
+  "$TMP/home/.codex/agents/researcher.toml"
+cmp "$TMP/reviewer-valid.toml" "$TMP/home/.codex/agents/reviewer.toml"
+backup_dir="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["backup"])' \
+  "$TMP/home/.config/aicli-ultimate/install-state.json")"
+grep -q '^model = "test"$' "$backup_dir/.codex/agents/planner.toml"
+grep -q '^description = ""$' "$backup_dir/.codex/agents/planner.toml"
+grep -q '^name = ""$' "$backup_dir/.codex/agents/researcher.toml"
+cmp "$TMP/reviewer-valid.toml" "$backup_dir/.codex/agents/reviewer.toml"
 grep -q 'Respond in English' "$TMP/home/.codex/AGENTS.md"
 grep -q 'CentauryAI repositories' "$TMP/home/.codex/AGENTS.md"
 grep -q 'hooksPath' "$TMP/home/.config/aicli-ultimate/centaury.gitconfig"
@@ -119,6 +138,7 @@ python3 - "$TMP/home/.config/aicli-ultimate/mcpls.toml" <<'PY'
 import sys, tomllib
 with open(sys.argv[1], "rb") as handle:
     config = tomllib.load(handle)
+assert [item["language_id"] for item in config["workspace"]["language_extensions"]] == ["rust", "typescript", "python", "markdown"]
 assert [server["language_id"] for server in config["lsp_servers"]] == ["rust", "typescript", "python", "markdown"]
 PY
 test -f "$TMP/home/.claude/skills/caveman/SKILL.md"
@@ -168,6 +188,12 @@ for skill in \
   grep -q 'Delegate only task-branch-correctable sync or integration failures' "$skill"
   grep -q 'reviewer who is different from the implementer/resolver' "$skill"
   grep -q 'Do not delegate permission failures, missing approvals, required-check failures, ruleset blocks' "$skill"
+  grep -q 'HCOM hooks transport and inject messages; they do not rewrite prose' "$skill"
+  grep -q 'Orchestrator messages to the human/bigboss use normal concise English' "$skill"
+  grep -q 'Every task, review, follow-up, and nested delegation must include' "$skill"
+  grep -q '通信：凡 worker/orchestrator 消息，用 Caveman wenyan-ultra；code、commands、paths、identifiers、output、errors，逐字保之。' "$skill"
+  ! grep -q 'communication: use Caveman wenyan-ultra' "$skill"
+  grep -q 'request one reformatted reply with the contract repeated' "$skill"
 done
 test -f "$TMP/home/.claude/agents/ultimate-reviewer.md"
 test -f "$TMP/home/.config/opencode/agents/ultimate-reviewer.md"
