@@ -95,11 +95,6 @@ configure_shell() {
     printf '\n%s\n' "$marker_start"
     printf 'export PATH="$HOME/.local/bin:$PATH"\n'
     [[ "$TARGET_CODEX" == 1 ]] && printf "alias codex='aicli-ultimate'\n"
-    if [[ "$STATUSLINE" == 1 ]]; then
-      [[ "$TARGET_OPENCODE" == 1 ]] && printf "alias opencode='aicli-opencode'\n"
-      [[ "$TARGET_OMP" == 1 ]] && printf "alias omp='aicli-omp'\n"
-      [[ "$TARGET_ANTIGRAVITY" == 1 ]] && printf "alias agy='aicli-agy'\n"
-    fi
     if [[ "$COMPLETIONS" == 1 ]]; then
       if [[ "$TARGET_CODEX" == 1 && "${SHELL##*/}" == zsh ]]; then
         printf 'autoload -Uz compinit && compinit\n'
@@ -202,14 +197,55 @@ configure_antigravity() {
   fi
 }
 
-configure_generic_statusline() {
-  local agent="$1" wrapper="$2" tmux_config
-  tmux_config="$CONFIG_HOME/tmux-$agent.conf"
-  sed \
-    -e "s|@STATUS_COMMAND@|$BIN_DIR/aicli-agent-status|g" \
-    -e "s|@AGENT@|$agent|g" \
-    "$ROOT/statusline/tmux-agent.conf" >"$tmux_config"
-  install_owned_file "$ROOT/statusline/aicli-agent-powerline" "$BIN_DIR/$wrapper"
+configure_opencode_statusline() {
+  local home="$1" plugin plugin_json legacy legacy_json
+  legacy="$home/plugins/aicli-ultimate-statusline.js"
+  legacy_json="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$legacy")"
+  python3 "$ROOT/scripts/json_array.py" remove "$home/tui.json" plugin "$legacy_json"
+  if [[ -e "$legacy.aicli-ultimate-owned" ]]; then
+    rm -f "$legacy" "$legacy.aicli-ultimate-owned"
+  fi
+  plugin="$home/aicli-ultimate/statusline.js"
+  install_owned_file "$ROOT/statusline/opencode-powerline.js" "$plugin"
+  plugin_json="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$plugin")"
+  python3 "$ROOT/scripts/json_array.py" add "$home/tui.json" plugin "$plugin_json"
+  python3 "$ROOT/scripts/json_object_add.py" "$home/package.json" dependencies '@opentui/core' '"*"' \
+    || warn "Keeping the existing OpenCode @opentui/core dependency."
+}
+
+configure_omp_statusline() {
+  local agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}" config
+  config="$agent_dir/config.yml"
+  install_owned_file "$ROOT/statusline/omp-powerline.ts" "$agent_dir/extensions/aicli-ultimate-statusline.ts"
+  if [[ -e "$agent_dir/hooks/aicli-ultimate-statusline.ts.aicli-ultimate-owned" ]]; then
+    rm -f "$agent_dir/hooks/aicli-ultimate-statusline.ts" \
+      "$agent_dir/hooks/aicli-ultimate-statusline.ts.aicli-ultimate-owned"
+  fi
+  if command -v omp >/dev/null 2>&1 && ! grep -Eq '^statusLine:' "$config" 2>/dev/null; then
+    if [[ "$DRY_RUN" == 1 ]]; then
+      return 0
+    elif omp config set statusLine.preset full >/dev/null \
+      && omp config set statusLine.separator powerline >/dev/null; then
+      touch "$CONFIG_HOME/omp-statusline-owned"
+    else
+      warn "Could not enable OMP's native full Powerline preset; the additive footer hook was still installed."
+    fi
+  elif [[ -e "$CONFIG_HOME/omp-statusline-owned" ]]; then
+    :
+  elif grep -Eq '^statusLine:' "$config" 2>/dev/null; then
+    warn "Keeping the existing OMP statusLine configuration; only the additive footer hook was installed."
+  fi
+}
+
+configure_antigravity_statusline() {
+  local settings="$HOME/.gemini/antigravity-cli/settings.json" status_json
+  status_json="$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1],"enabled":True,"stack_with_default":False}))' "$BIN_DIR/antigravity-ultimate-status")"
+  if python3 "$ROOT/scripts/json_override.py" set "$settings" statusLine \
+    "$status_json" "$CONFIG_HOME/antigravity-statusline-previous.json"; then
+    install_owned_file "$ROOT/statusline/antigravity-powerline" "$BIN_DIR/antigravity-ultimate-status"
+  else
+    warn "Keeping an Antigravity statusLine changed after AI CLI Ultimate was installed."
+  fi
 }
 
 target_selected() {
@@ -318,7 +354,10 @@ mkdir -p "$backup"
 for file in "$CODEX_HOME/config.toml" "$CODEX_HOME/aicli-ultimate.config.toml" "$CODEX_HOME/AGENTS.md" \
   "$HOME/.claude/CLAUDE.md" "$HOME/.claude/settings.json" \
   "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/AGENTS.md" \
-  "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/tui.json" "$HOME/AGENTS.md" \
+  "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/tui.json" \
+  "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/package.json" "$HOME/AGENTS.md" \
+  "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/config.yml" \
+  "$HOME/.gemini/antigravity-cli/settings.json" \
   "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
   backup_file "$file" "$backup"
 done
@@ -337,6 +376,10 @@ if [[ "$TARGET_OPENCODE" == 1 ]]; then
   for file in "$ROOT/adapters/opencode/agents/"*.md; do
     backup_file "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agents/$(basename "$file")" "$backup"
   done
+  backup_file "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/aicli-ultimate/statusline.js" "$backup"
+fi
+if [[ "$TARGET_OMP" == 1 ]]; then
+  backup_file "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/extensions/aicli-ultimate-statusline.ts" "$backup"
 fi
 if [[ "$TARGET_ANTIGRAVITY" == 1 ]]; then
   backup_file "$HOME/.gemini/config/plugins/aicli-ultimate" "$backup"
@@ -402,10 +445,12 @@ if [[ "$TARGET_OPENCODE" == 1 ]]; then
     || warn "Keeping the existing OpenCode TUI schema."
   python3 "$ROOT/scripts/json_add.py" "$opencode_home/tui.json" theme '"tokyonight"' \
     || warn "Keeping the existing OpenCode theme."
+  [[ "$STATUSLINE" == 1 ]] && configure_opencode_statusline "$opencode_home"
 fi
 
 if [[ "$TARGET_OMP" == 1 ]]; then
   upsert_managed_block "$HOME/AGENTS.md" "$CONFIG_HOME/global-instructions.md"
+  [[ "$STATUSLINE" == 1 ]] && configure_omp_statusline
 fi
 
 if [[ "$TARGET_OPENCODE" == 1 || "$TARGET_OMP" == 1 ]]; then
@@ -414,6 +459,7 @@ fi
 
 if [[ "$TARGET_ANTIGRAVITY" == 1 ]]; then
   configure_antigravity
+  [[ "$STATUSLINE" == 1 ]] && configure_antigravity_statusline
 fi
 
 if [[ "$CENTAURY" == 1 ]]; then
@@ -432,13 +478,6 @@ if [[ "$TARGET_CODEX" == 1 ]]; then
   install_owned_file "$ROOT/statusline/codex-powerline-status" "$BIN_DIR/aicli-ultimate-status"
 fi
 
-if [[ "$STATUSLINE" == 1 ]] && (( TARGET_OPENCODE + TARGET_OMP + TARGET_ANTIGRAVITY > 0 )); then
-  install_owned_file "$ROOT/statusline/aicli-agent-status" "$BIN_DIR/aicli-agent-status"
-  if [[ "$TARGET_OPENCODE" == 1 ]]; then configure_generic_statusline opencode aicli-opencode; fi
-  if [[ "$TARGET_OMP" == 1 ]]; then configure_generic_statusline omp aicli-omp; fi
-  if [[ "$TARGET_ANTIGRAVITY" == 1 ]]; then configure_generic_statusline agy aicli-agy; fi
-fi
-
 configure_shell
 
 if [[ "$STATUSLINE" == 1 && "$TARGET_CODEX" == 1 ]]; then
@@ -453,12 +492,8 @@ if [[ "$STATUSLINE" == 1 && "$TARGET_CLAUDE" == 1 ]] && ! command -v jq >/dev/nu
   warn "Claude statusline requires jq. Claude Code will ignore output until jq is installed."
 fi
 
-if [[ "$STATUSLINE" == 1 ]] && (( TARGET_OPENCODE + TARGET_OMP + TARGET_ANTIGRAVITY > 0 )); then
-  missing=()
-  for command in tmux git; do command -v "$command" >/dev/null || missing+=("$command"); done
-  if ((${#missing[@]})); then
-    warn "OpenCode/OMP/Antigravity statuslines need: ${missing[*]}. Their wrappers will fall back to the native CLI."
-  fi
+if [[ "$STATUSLINE" == 1 && "$TARGET_ANTIGRAVITY" == 1 ]] && ! command -v jq >/dev/null; then
+  warn "Antigravity statusline requires jq; Antigravity will ignore output until jq is installed."
 fi
 
 if [[ "$DRY_RUN" != 1 && "$TARGET_CODEX" == 1 ]]; then

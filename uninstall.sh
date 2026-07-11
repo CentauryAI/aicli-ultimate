@@ -108,10 +108,36 @@ if [[ -f "$INSTALL_DIR/scripts/json_remove.py" ]]; then
     "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/tui.json" theme '"tokyonight"'
 fi
 
+if [[ -f "$INSTALL_DIR/scripts/json_array.py" ]]; then
+  opencode_plugin="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/aicli-ultimate/statusline.js"
+  opencode_plugin_json="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$opencode_plugin")"
+  python3 "$INSTALL_DIR/scripts/json_array.py" remove \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/tui.json" plugin "$opencode_plugin_json"
+  legacy_opencode_plugin="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/aicli-ultimate-statusline.js"
+  legacy_opencode_plugin_json="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$legacy_opencode_plugin")"
+  python3 "$INSTALL_DIR/scripts/json_array.py" remove \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/tui.json" plugin "$legacy_opencode_plugin_json"
+fi
+if [[ -f "$INSTALL_DIR/scripts/json_object_remove.py" ]]; then
+  python3 "$INSTALL_DIR/scripts/json_object_remove.py" \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/package.json" dependencies '@opentui/core' '"*"'
+fi
+
 if [[ -f "$INSTALL_DIR/scripts/json_override.py" ]]; then
   claude_status_json="$(python3 -c 'import json,sys; print(json.dumps({"type":"command","command":sys.argv[1]}))' "$BIN_DIR/claude-ultimate-status")"
   python3 "$INSTALL_DIR/scripts/json_override.py" restore "$HOME/.claude/settings.json" statusLine \
     "$claude_status_json" "$CONFIG_HOME/claude-statusline-previous.json"
+  antigravity_status_json="$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1],"enabled":True,"stack_with_default":False}))' "$BIN_DIR/antigravity-ultimate-status")"
+  python3 "$INSTALL_DIR/scripts/json_override.py" restore \
+    "$HOME/.gemini/antigravity-cli/settings.json" statusLine \
+    "$antigravity_status_json" "$CONFIG_HOME/antigravity-statusline-previous.json"
+fi
+
+if [[ -f "$CONFIG_HOME/omp-statusline-owned" ]] && command -v omp >/dev/null 2>&1; then
+  preset="$(omp config get statusLine.preset --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("value", ""))' || true)"
+  separator="$(omp config get statusLine.separator --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("value", ""))' || true)"
+  [[ "$preset" == full ]] && omp config reset statusLine.preset >/dev/null 2>&1 || true
+  [[ "$separator" == powerline ]] && omp config reset statusLine.separator >/dev/null 2>&1 || true
 fi
 
 remove_skill_set "$HOME/.claude/skills"
@@ -145,6 +171,11 @@ remove_generated_file "$BIN_DIR/aicli-agent-status" "$INSTALL_DIR/statusline/aic
 remove_generated_file "$BIN_DIR/aicli-opencode" "$INSTALL_DIR/statusline/aicli-agent-powerline"
 remove_generated_file "$BIN_DIR/aicli-omp" "$INSTALL_DIR/statusline/aicli-agent-powerline"
 remove_generated_file "$BIN_DIR/aicli-agy" "$INSTALL_DIR/statusline/aicli-agent-powerline"
+remove_generated_file "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/aicli-ultimate/statusline.js" "$INSTALL_DIR/statusline/opencode-powerline.js"
+remove_generated_file "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/aicli-ultimate-statusline.js" "$INSTALL_DIR/statusline/opencode-powerline.js"
+remove_generated_file "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/extensions/aicli-ultimate-statusline.ts" "$INSTALL_DIR/statusline/omp-powerline.ts"
+remove_generated_file "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/hooks/aicli-ultimate-statusline.ts" "$INSTALL_DIR/statusline/omp-powerline.ts"
+remove_generated_file "$BIN_DIR/antigravity-ultimate-status" "$INSTALL_DIR/statusline/antigravity-powerline"
 
 backup=""
 if [[ -r "$CONFIG_HOME/install-state.json" ]]; then
@@ -167,6 +198,7 @@ rm -rf "$CONFIG_HOME/git-hooks"
 rm -f "$CONFIG_HOME/centaury.gitconfig" "$CONFIG_HOME/modes" "$CONFIG_HOME/tmux.conf" \
   "$CONFIG_HOME/tmux-opencode.conf" "$CONFIG_HOME/tmux-omp.conf" "$CONFIG_HOME/tmux-agy.conf" \
   "$CONFIG_HOME/claude-statusline-previous.json" "$CONFIG_HOME/profile-state.json" \
+  "$CONFIG_HOME/antigravity-statusline-previous.json" "$CONFIG_HOME/omp-statusline-owned" \
   "$CONFIG_HOME/install-state.json"
 
 printf 'AI CLI Ultimate removed. Backups were preserved in %s/backups.\n' "$CONFIG_HOME"
