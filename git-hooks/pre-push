@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+remote_name=${1:-origin}
+remote_url=${2:-}
+
+printf '%s\n' "$remote_url" | grep -Eiq 'github\.com[/:](CentauryAI|CentuaryAI)/' || exit 0
+
+default_branch=""
+default_ref=$(git symbolic-ref --quiet --short "refs/remotes/$remote_name/HEAD" 2>/dev/null || true)
+[ -n "$default_ref" ] && default_branch=${default_ref#"$remote_name/"}
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "${remote_ref:-}" ] || continue
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/master)
+      echo "CentauryAI guard: direct pushes to '$remote_ref' are prohibited." >&2
+      exit 1
+      ;;
+  esac
+  if [ -n "$default_branch" ] && [ "$remote_ref" = "refs/heads/$default_branch" ]; then
+    echo "CentauryAI guard: '$remote_ref' is the protected default branch." >&2
+    exit 1
+  fi
+done
+
+exit 0

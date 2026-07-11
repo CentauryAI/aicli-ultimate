@@ -1,0 +1,29 @@
+{
+  "name": "caveman",
+  "version": "1.0.0",
+  "description": "Token-efficient communication and review workflows for Codex.",
+  "author": {
+    "name": "Julius Brussee",
+    "url": "https://github.com/JuliusBrussee"
+  },
+  "homepage": "https://github.com/JuliusBrussee/caveman",
+  "repository": "https://github.com/JuliusBrussee/caveman",
+  "license": "MIT",
+  "keywords": ["concise", "review", "tokens", "productivity"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Caveman",
+    "shortDescription": "Concise, technically complete output",
+    "longDescription": "Reduce conversational token usage while preserving technical accuracy, code, errors, reviews, and commit intent.",
+    "developerName": "Julius Brussee",
+    "category": "Productivity",
+    "capabilities": ["Instructions", "Code review"],
+    "websiteURL": "https://github.com/JuliusBrussee/caveman",
+    "defaultPrompt": [
+      "Use Caveman mode for this task.",
+      "Review this diff in Caveman format.",
+      "Write a concise commit message."
+    ],
+    "brandColor": "#E0AF68"
+  }
+}

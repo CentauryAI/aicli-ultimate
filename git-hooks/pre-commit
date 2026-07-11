@@ -1,0 +1,34 @@
+#!/bin/sh
+set -eu
+
+is_centaury_repo() {
+  git config --get-regexp '^remote\..*\.url$' 2>/dev/null \
+    | grep -Eiq 'github\.com[/:](CentauryAI|CentuaryAI)/'
+}
+
+is_centaury_repo || exit 0
+
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+[ -n "$branch" ] || {
+  echo "CentauryAI guard: commits from a detached HEAD are blocked." >&2
+  exit 1
+}
+
+case "$branch" in
+  main|master)
+    echo "CentauryAI guard: direct commits to '$branch' are prohibited." >&2
+    echo "Create a task branch first, for example: ai/<task>-<id>." >&2
+    exit 1
+    ;;
+esac
+
+for remote in $(git remote 2>/dev/null); do
+  default_ref=$(git symbolic-ref --quiet --short "refs/remotes/$remote/HEAD" 2>/dev/null || true)
+  default_branch=${default_ref#"$remote/"}
+  if [ -n "$default_branch" ] && [ "$branch" = "$default_branch" ]; then
+    echo "CentauryAI guard: '$branch' is the protected default branch." >&2
+    exit 1
+  fi
+done
+
+exit 0

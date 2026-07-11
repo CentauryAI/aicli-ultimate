@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -u
+
+payload="$(cat)"
+model="$(jq -r '.model.display_name // .model.id // "Claude"' <<<"$payload" 2>/dev/null || printf Claude)"
+directory="$(jq -r '.workspace.current_dir // .cwd // ""' <<<"$payload" 2>/dev/null || true)"
+used="$(jq -r '.context_window.used_percentage // 0 | floor' <<<"$payload" 2>/dev/null || printf 0)"
+branch="$(git -C "${directory:-$PWD}" branch --show-current 2>/dev/null || true)"
+directory="${directory:-$PWD}"
+[[ "$directory" == "$HOME"* ]] && directory="~${directory#$HOME}"
+[[ -n "$branch" ]] || branch="no-git"
+
+printf '\033[38;2;122;162;247m\033[48;2;122;162;247m\033[38;2;26;27;38m ◆ %s \033[48;2;61;89;161m\033[38;2;122;162;247m\033[38;2;192;202;245m 󰉋 %s \033[48;2;42;195;222m\033[38;2;61;89;161m\033[38;2;26;27;38m  %s \033[48;2;187;154;247m\033[38;2;42;195;222m\033[38;2;26;27;38m CTX %s%% \033[49m\033[38;2;187;154;247m\033[0m\n' \
+  "$model" "$directory" "$branch" "$used"

@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+set -u
+
+line="${1:-1}"
+pane="${2:-${TMUX_PANE:-}}"
+base="#1a1b26"
+cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/aicli-ultimate"
+config_root="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
+mkdir -p "$cache_root"
+pane_key="${pane//[^a-zA-Z0-9]/_}"
+cache="$cache_root/status-${pane_key:-default}"
+lock_dir="$cache.lock"
+
+safe() {
+  local value="${1//$'\n'/ }"
+  value="${value//$'\r'/ }"
+  value="${value//#/##}"
+  printf '%s' "$value"
+}
+
+compact_number() {
+  awk -v n="${1:-0}" 'BEGIN {
+    if (n >= 1000000) printf "%.1fM", n / 1000000;
+    else if (n >= 1000) printf "%.1fk", n / 1000;
+    else printf "%d", n;
+  }'
+}
+
+bar() {
+  local pct="${1:-0}" width="${2:-10}" full empty i
+  (( pct < 0 )) && pct=0
+  (( pct > 100 )) && pct=100
+  full=$((pct * width / 100))
+  empty=$((width - full))
+  for ((i=0; i<full; i++)); do printf '█'; done
+  for ((i=0; i<empty; i++)); do printf '░'; done
+}
+
+uppercase() {
+  printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+epoch_time() {
+  local epoch="$1" format="$2"
+  date -d "@$epoch" "+$format" 2>/dev/null \
+    || date -r "$epoch" "+$format" 2>/dev/null \
+    || true
+}
+
+mtime() {
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || printf 0
+}
+
+powerline() {
+  local first=1 previous="" color fg value
+  while (( $# >= 3 )); do
+    color="$1"; fg="$2"; value="$3"; shift 3
+    if (( first )); then
+      printf '#[fg=%s,bg=%s]' "$color" "$base"
+      first=0
+    else
+      printf '#[fg=%s,bg=%s]' "$previous" "$color"
+    fi
+    printf '#[fg=%s,bg=%s,bold] %s #[nobold]' "$fg" "$color" "$(safe "$value")"
+    previous="$color"
+  done
+  (( first )) || printf '#[fg=%s,bg=%s]#[default]' "$previous" "$base"
+}
+
+generate() {
+  local cwd rollout model effort sql_cwd row metrics codex_home
+  cwd="$PWD"
+  if [[ -n "$pane" ]]; then
+    cwd="$(tmux display-message -p -t "$pane" '#{pane_current_path}' 2>/dev/null || printf '%s' "$PWD")"
+  fi
+
+  sql_cwd="${cwd//\'/\'\'}"
+  codex_home="${CODEX_HOME:-$HOME/.codex}"
+  row=""
+  if [[ -r "$codex_home/state_5.sqlite" ]]; then
+    row="$(sqlite3 -separator $'\t' "$codex_home/state_5.sqlite" \
+      "select rollout_path,coalesce(model,''),coalesce(reasoning_effort,''),tokens_used from threads where cwd='$sql_cwd' and archived=0 order by updated_at_ms desc,updated_at desc limit 1;" 2>/dev/null || true)"
+  fi
+  IFS=$'\t' read -r rollout model effort _ <<<"$row"
+  model="${model:-Codex}"
+  effort="${effort:-xhigh}"
+
+  metrics='{}'
+  if [[ -n "${rollout:-}" && -r "$rollout" ]]; then
+    metrics="$(tail -n 1200 "$rollout" 2>/dev/null | jq -cs '
+      map(select(.type == "event_msg" and .payload.type == "token_count"))
+      | (last // {}) | .payload // {}
+    ' 2>/dev/null || printf '{}')"
+  fi
+
+  local input output cached current window ctx_pct primary weekly reset5 reset7
+  input="$(jq -r '.info.total_token_usage.input_tokens // 0' <<<"$metrics")"
+  output="$(jq -r '.info.total_token_usage.output_tokens // 0' <<<"$metrics")"
+  cached="$(jq -r '.info.total_token_usage.cached_input_tokens // 0' <<<"$metrics")"
+  current="$(jq -r '.info.last_token_usage.total_tokens // 0' <<<"$metrics")"
+  window="$(jq -r '.info.model_context_window // 0' <<<"$metrics")"
+  ctx_pct="$(awk -v used="$current" -v total="$window" 'BEGIN { if (total > 0) printf "%d", used * 100 / total; else print 0 }')"
+  primary="$(jq -r '.rate_limits.primary.used_percent // 0 | floor' <<<"$metrics")"
+  weekly="$(jq -r '.rate_limits.secondary.used_percent // 0 | floor' <<<"$metrics")"
+  reset5="$(jq -r '.rate_limits.primary.resets_at // 0' <<<"$metrics")"
+  reset7="$(jq -r '.rate_limits.secondary.resets_at // 0' <<<"$metrics")"
+  [[ "$reset5" != 0 ]] && reset5="$(epoch_time "$reset5" '%H:%M')" || reset5="--:--"
+  [[ "$reset7" != 0 ]] && reset7="$(epoch_time "$reset7" '%a %H:%M')" || reset7="--- --:--"
+  reset5="${reset5:---:--}"
+  reset7="${reset7:---- --:--}"
+
+  local branch changes caveman ponytail cwd_short
+  branch="$(git -C "$cwd" branch --show-current 2>/dev/null || true)"
+  [[ -n "$branch" ]] || branch="no-git"
+  changes="$(git -C "$cwd" status --porcelain --untracked-files=normal 2>/dev/null | wc -l | tr -d ' ')"
+  caveman="$(sed -n 's/^caveman=//p' "$config_root/modes" 2>/dev/null | head -1 | tr -cd 'a-zA-Z0-9-' || true)"
+  ponytail="$(sed -n 's/^ponytail=//p' "$config_root/modes" 2>/dev/null | head -1 | tr -cd 'a-zA-Z0-9-' || true)"
+  if [[ "$cwd" == "$HOME"* ]]; then cwd_short="~${cwd#$HOME}"; else cwd_short="$cwd"; fi
+
+  if [[ -n "$caveman" && -n "$ponytail" ]]; then
+    powerline '#7aa2f7' '#1a1b26' "◆ $model [$effort]" '#3d59a1' '#c0caf5' "󰉋 $cwd_short" '#2ac3de' '#1a1b26' " $branch  Δ$changes" '#e0af68' '#1a1b26' "CAVEMAN:$(uppercase "$caveman")" '#9ece6a' '#1a1b26' "PONYTAIL:$(uppercase "$ponytail")"
+  elif [[ -n "$caveman" ]]; then
+    powerline '#7aa2f7' '#1a1b26' "◆ $model [$effort]" '#3d59a1' '#c0caf5' "󰉋 $cwd_short" '#2ac3de' '#1a1b26' " $branch  Δ$changes" '#e0af68' '#1a1b26' "CAVEMAN:$(uppercase "$caveman")"
+  elif [[ -n "$ponytail" ]]; then
+    powerline '#7aa2f7' '#1a1b26' "◆ $model [$effort]" '#3d59a1' '#c0caf5' "󰉋 $cwd_short" '#2ac3de' '#1a1b26' " $branch  Δ$changes" '#9ece6a' '#1a1b26' "PONYTAIL:$(uppercase "$ponytail")"
+  else
+    powerline '#7aa2f7' '#1a1b26' "◆ $model [$effort]" '#3d59a1' '#c0caf5' "󰉋 $cwd_short" '#2ac3de' '#1a1b26' " $branch  Δ$changes"
+  fi
+  printf '\n'
+  powerline '#bb9af7' '#1a1b26' "CTX $(bar "$ctx_pct") ${ctx_pct}%" '#7dcfff' '#1a1b26' "IN $(compact_number "$input")" '#7aa2f7' '#1a1b26' "OUT $(compact_number "$output")" '#565f89' '#c0caf5' "CACHE $(compact_number "$cached")"
+  printf '\n'
+  powerline '#e0af68' '#1a1b26' "5H $(bar "$primary" 8) ${primary}% ↻$reset5" '#f7768e' '#1a1b26' "7D $(bar "$weekly" 8) ${weekly}% ↻$reset7"
+  printf '\n'
+}
+
+now=$(date +%s)
+modified=$(mtime "$cache")
+if (( now - modified >= 10 )); then
+  if mkdir "$lock_dir" 2>/dev/null; then
+    tmp="$cache.tmp.$$"
+    generate >"$tmp"
+    mv "$tmp" "$cache"
+    rmdir "$lock_dir" 2>/dev/null || true
+  elif [[ ! -r "$cache" ]]; then
+    generate >"$cache"
+  fi
+fi
+sed -n "${line}p" "$cache"

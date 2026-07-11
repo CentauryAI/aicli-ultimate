@@ -1,0 +1,29 @@
+{
+  "name": "centaury-workflow",
+  "version": "1.0.0",
+  "description": "Safe branch, verification, and pull-request workflow for CentauryAI repositories.",
+  "author": {
+    "name": "CentauryAI",
+    "url": "https://github.com/CentauryAI"
+  },
+  "homepage": "https://github.com/CentauryAI/aicli-ultimate",
+  "repository": "https://github.com/CentauryAI/aicli-ultimate",
+  "license": "MIT",
+  "keywords": ["branches", "pull-requests", "github", "safety"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Centaury Workflow",
+    "shortDescription": "Safe company branch and PR workflow",
+    "longDescription": "Keep changes off primary branches, detect duplicate work, synchronize with the primary branch, verify changes, and merge only through a compatible pull request.",
+    "developerName": "CentauryAI",
+    "category": "Productivity",
+    "capabilities": ["Git workflow", "Pull requests", "Verification"],
+    "websiteURL": "https://github.com/CentauryAI/aicli-ultimate",
+    "defaultPrompt": [
+      "Safely start this CentauryAI task on a dedicated branch.",
+      "Check whether this work already exists before implementing it.",
+      "Verify this branch and prepare a compatible pull request."
+    ],
+    "brandColor": "#7AA2F7"
+  }
+}

@@ -1,0 +1,28 @@
+model_reasoning_effort = "@EFFORT@"
+web_search = "indexed"
+
+[features]
+memories = true
+multi_agent = true
+goals = true
+plugins = true
+
+[agents]
+max_threads = 6
+max_depth = 1
+
+[agents.ultimate_planner]
+description = "Plans non-trivial changes before implementation; returns a short checklist, files, risks, and verification."
+config_file = "@CODEX_HOME@/agents/ultimate-planner.toml"
+
+[agents.ultimate_researcher]
+description = "Explores repositories and returns brief, actionable findings with file and line references."
+config_file = "@CODEX_HOME@/agents/ultimate-researcher.toml"
+
+[agents.ultimate_reviewer]
+description = "Reviews diffs for real bugs, concrete failure scenarios, and needless complexity; read-only unless explicitly asked to edit."
+config_file = "@CODEX_HOME@/agents/ultimate-reviewer.toml"
+
+[tui]
+theme = "midnight-blue"
+@STATUS_LINE_CONFIG@

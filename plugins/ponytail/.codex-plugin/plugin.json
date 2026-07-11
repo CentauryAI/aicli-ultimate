@@ -1,0 +1,31 @@
+{
+  "name": "ponytail",
+  "version": "4.8.3",
+  "description": "Lazy senior developer mode: YAGNI, standard library first, smallest correct implementation.",
+  "author": {
+    "name": "Dietrich Gebert",
+    "url": "https://github.com/DietrichGebert"
+  },
+  "homepage": "https://github.com/DietrichGebert/ponytail",
+  "repository": "https://github.com/DietrichGebert/ponytail",
+  "license": "MIT",
+  "keywords": ["yagni", "minimalism", "code-review", "productivity"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Ponytail",
+    "shortDescription": "Lazy senior developer mode",
+    "longDescription": "Prefer YAGNI, standard library, native platform features, and the smallest correct implementation.",
+    "developerName": "Dietrich Gebert",
+    "category": "Productivity",
+    "capabilities": ["Instructions", "Code review"],
+    "websiteURL": "https://github.com/DietrichGebert/ponytail",
+    "defaultPrompt": [
+      "Use Ponytail mode for this task.",
+      "Review this diff for over-engineering.",
+      "Find the smallest correct implementation."
+    ],
+    "brandColor": "#9ECE6A",
+    "composerIcon": "./assets/logo.png",
+    "logo": "./assets/logo.png"
+  }
+}

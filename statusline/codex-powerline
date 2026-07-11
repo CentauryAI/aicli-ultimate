@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+real_codex="${CODEX_REAL_BIN:-$(command -v codex || true)}"
+config_root="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
+tmux_config="$config_root/tmux.conf"
+mode_file="$config_root/modes"
+profile="${AICLI_ULTIMATE_PROFILE:-aicli-ultimate}"
+profile_args=(--profile "$profile")
+
+for argument in "$@"; do
+  case "$argument" in
+    -p|--profile|--profile=*) profile_args=(); break ;;
+  esac
+done
+
+if [[ -z "$real_codex" || ! -x "$real_codex" ]]; then
+  printf 'Codex CLI not found. Install Codex first: npm install -g @openai/codex\n' >&2
+  exit 1
+fi
+
+statusline="$(sed -n 's/^statusline=//p' "$mode_file" 2>/dev/null | head -1)"
+status_ready=1
+for dependency in tmux jq sqlite3 git; do
+  command -v "$dependency" >/dev/null 2>&1 || status_ready=0
+done
+
+case "${1:-}" in
+  exec|review|resume|fork|archive|delete|unarchive|cloud|sandbox)
+    exec "$real_codex" "${profile_args[@]}" "$@"
+    ;;
+  login|logout|mcp|plugin|mcp-server|app-server|remote-control|completion|update|doctor|debug|apply|exec-server|features|help|-h|--help|-V|--version)
+    exec "$real_codex" "$@"
+    ;;
+esac
+
+if [[ "$statusline" != "enabled" || "$status_ready" != 1 || ! -t 0 || ! -t 1 ]]; then
+  exec "$real_codex" "${profile_args[@]}" "$@"
+fi
+
+session="aicli-ultimate-$$"
+printf -v command '%q ' "$real_codex" "${profile_args[@]}" "$@"
+exec env TMUX= tmux -L "aicli-ultimate-$$" -f "$tmux_config" \
+  new-session -s "$session" -c "$PWD" "$command"
