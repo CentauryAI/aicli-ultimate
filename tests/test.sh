@@ -48,6 +48,62 @@ XDG_CACHE_HOME="$TMP/status-home/.cache" \
 grep -q 'Codex' "$TMP/status.out"
 test ! -s "$TMP/status.err"
 
+# External tmux Powerline suppresses only its own duplicate native Codex line.
+mkdir -p "$TMP/wrapper-bin" "$TMP/wrapper-home/.config/aicli-ultimate"
+printf 'statusline=enabled\n' >"$TMP/wrapper-home/.config/aicli-ultimate/modes"
+: >"$TMP/wrapper-home/.config/aicli-ultimate/tmux.conf"
+printf '%s\n' \
+  '#!/bin/sh' \
+  'printf "%s\n" "$@" >"$CODEX_ARGS_LOG"' >"$TMP/wrapper-bin/codex-real"
+printf '%s\n' \
+  '#!/bin/bash' \
+  'for command; do :; done' \
+  'exec /bin/bash -c "$command"' >"$TMP/wrapper-bin/tmux"
+chmod +x "$TMP/wrapper-bin/codex-real" "$TMP/wrapper-bin/tmux"
+HOME="$TMP/wrapper-home" \
+XDG_CONFIG_HOME="$TMP/wrapper-home/.config" \
+CODEX_REAL_BIN="$TMP/wrapper-bin/codex-real" \
+CODEX_ARGS_LOG="$TMP/codex-args.log" \
+PATH="$TMP/wrapper-bin:/usr/bin:/bin" \
+  python3 - "$ROOT/statusline/codex-powerline" <<'PY'
+import errno, os, pty, sys
+
+pid, master = pty.fork()
+if pid == 0:
+    os.execve("/bin/bash", ["/bin/bash", sys.argv[1]], os.environ)
+while True:
+    try:
+        if not os.read(master, 4096):
+            break
+    except OSError as error:
+        if error.errno != errno.EIO:
+            raise
+        break
+_, status = os.waitpid(pid, 0)
+raise SystemExit(os.waitstatus_to_exitcode(status))
+PY
+grep -qx -- '--profile' "$TMP/codex-args.log"
+grep -qx 'aicli-ultimate' "$TMP/codex-args.log"
+grep -qx -- '-c' "$TMP/codex-args.log"
+grep -Fqx 'tui.status_line=[]' "$TMP/codex-args.log"
+
+# Base Codex fallback preserves existing TUI settings and user status lines.
+printf '[tui]\ntheme = "custom"\n' >"$TMP/codex-config.toml"
+cp "$TMP/codex-config.toml" "$TMP/codex-config.expected"
+python3 "$ROOT/scripts/codex_statusline.py" install \
+  "$TMP/codex-config.toml" "$TMP/codex-statusline-state.json"
+grep -q '^theme = "custom"$' "$TMP/codex-config.toml"
+grep -q '# aicli-ultimate-owned$' "$TMP/codex-config.toml"
+python3 "$ROOT/scripts/codex_statusline.py" restore \
+  "$TMP/codex-config.toml" "$TMP/codex-statusline-state.json"
+cmp "$TMP/codex-config.expected" "$TMP/codex-config.toml"
+printf '[tui]\nstatus_line = ["model"]\n' >"$TMP/codex-config.toml"
+cp "$TMP/codex-config.toml" "$TMP/codex-config.expected"
+python3 "$ROOT/scripts/codex_statusline.py" install \
+  "$TMP/codex-config.toml" "$TMP/codex-statusline-state.json"
+cmp "$TMP/codex-config.expected" "$TMP/codex-config.toml"
+test ! -e "$TMP/codex-statusline-state.json"
+
 python3 -m py_compile "$ROOT/scripts/"*.py
 python3 -m json.tool "$ROOT/.claude-plugin/marketplace.json" >/dev/null
 python3 -m json.tool "$ROOT/plugins/github-lsp/.claude-plugin/plugin.json" >/dev/null
@@ -120,6 +176,10 @@ test -x "$TMP/home/.local/bin/claude-ultimate-status"
 test -x "$TMP/home/.local/bin/antigravity-ultimate-status"
 grep -q -- '--profile' "$TMP/home/.local/bin/aicli-ultimate"
 grep -q 'model_reasoning_effort = "xhigh"' "$TMP/home/.codex/aicli-ultimate.config.toml"
+grep -Fq 'status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-remaining", "five-hour-limit", "weekly-limit"]' \
+  "$TMP/home/.codex/aicli-ultimate.config.toml"
+grep -Fq 'status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-remaining", "five-hour-limit", "weekly-limit"] # aicli-ultimate-owned' \
+  "$TMP/home/.codex/config.toml"
 grep -q '^\[mcp_servers.aicli_lsp\]$' "$TMP/home/.codex/aicli-ultimate.config.toml"
 grep -q '^enabled = true$' "$TMP/home/.codex/aicli-ultimate.config.toml"
 grep -q '"get_completions"' "$TMP/home/.codex/aicli-ultimate.config.toml"
@@ -326,6 +386,7 @@ test ! -e "$TMP/home/.omp/agent/extensions/aicli-ultimate-statusline.ts"
 test ! -e "$TMP/home/.config/aicli-ultimate/mcpls.toml"
 test ! -e "$TMP/home/.claude/skills/rust-best-practices"
 test ! -e "$TMP/home/.agents/skills/rust-best-practices"
+test ! -e "$TMP/home/.codex/config.toml"
 
 mkdir -p "$TMP/no-lsp-home"
 HOME="$TMP/no-lsp-home" \

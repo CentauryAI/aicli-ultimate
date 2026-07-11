@@ -68,6 +68,6 @@ if [[ "$statusline" != "enabled" || "$status_ready" != 1 || ! -t 0 || ! -t 1 ]];
 fi
 
 session="aicli-ultimate-$$"
-printf -v command '%q ' "$real_codex" "${profile_args[@]}" "$@"
+printf -v command '%q ' "$real_codex" "${profile_args[@]}" -c 'tui.status_line=[]' "$@"
 exec env TMUX= tmux -L "aicli-ultimate-$$" -f "$tmux_config" \
   new-session -s "$session" -c "$PWD" "$command"
