@@ -813,14 +813,19 @@ ask "Install shell completions?" y && COMPLETIONS=1 || COMPLETIONS=0
 ask "Install optional frontend skills?" n && FRONTEND=1 || FRONTEND=0
 ask "Install optional Playwright testing skill?" n && PLAYWRIGHT=1 || PLAYWRIGHT=0
 ask "Install optional React best-practices skill?" n && REACT=1 || REACT=0
+ask "Install optional web-app testing skill (Anthropic)?" n && WEBAPP=1 || WEBAPP=0
+ask "Install optional MCP builder skill (Anthropic)?" n && MCPBUILDER=1 || MCPBUILDER=0
+ask "Install optional plan-grilling skill with ADR docs (grill-with-docs)?" n && GRILLDOCS=1 || GRILLDOCS=0
+ask "Install optional security best-practices skill (OpenAI)?" n && SECBP=1 || SECBP=0
 if [[ "$TARGET_CODEX" == 1 ]]; then
   ask "Install the official Codex Security plugin?" n && SECURITY=1 || SECURITY=0
 else
   SECURITY=0
 fi
 
+OPTIONAL_SKILLS=$((FRONTEND + PLAYWRIGHT + REACT + WEBAPP + MCPBUILDER + GRILLDOCS + SECBP))
 # The "Optional skills" step only runs when selected outside dry-run.
-[[ "$DRY_RUN" != 1 ]] && (( FRONTEND + PLAYWRIGHT + REACT > 0 )) || STEP_TOTAL=7
+[[ "$DRY_RUN" != 1 ]] && (( OPTIONAL_SKILLS > 0 )) || STEP_TOTAL=7
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup="$CONFIG_HOME/backups/$timestamp"
@@ -1057,7 +1062,7 @@ if [[ "$DRY_RUN" != 1 && "$TARGET_CODEX" == 1 ]]; then
   if [[ "$SECURITY" == 1 ]]; then install_plugin codex-security@openai-curated 0; fi
 fi
 
-if [[ "$DRY_RUN" != 1 ]] && (( FRONTEND + PLAYWRIGHT + REACT > 0 )); then
+if [[ "$DRY_RUN" != 1 ]] && (( OPTIONAL_SKILLS > 0 )); then
   step "Optional skills"
   skills_agent_list="$(skills_agents)"
   install_optional_skill() {
@@ -1072,6 +1077,15 @@ if [[ "$DRY_RUN" != 1 ]] && (( FRONTEND + PLAYWRIGHT + REACT > 0 )); then
   [[ "$FRONTEND" == 1 ]] && install_optional_skill anthropics/skills@frontend-design frontend-design
   [[ "$PLAYWRIGHT" == 1 ]] && install_optional_skill microsoft/playwright-cli@playwright-cli playwright-cli
   [[ "$REACT" == 1 ]] && install_optional_skill vercel-labs/agent-skills@vercel-react-best-practices vercel-react-best-practices
+  [[ "$WEBAPP" == 1 ]] && install_optional_skill anthropics/skills@webapp-testing webapp-testing
+  [[ "$MCPBUILDER" == 1 ]] && install_optional_skill anthropics/skills@mcp-builder mcp-builder
+  if [[ "$GRILLDOCS" == 1 ]]; then
+    # grill-with-docs delegates to the /grilling and /domain-modeling skills.
+    install_optional_skill mattpocock/skills@grill-with-docs grill-with-docs
+    install_optional_skill mattpocock/skills@grilling grilling
+    install_optional_skill mattpocock/skills@domain-modeling domain-modeling
+  fi
+  [[ "$SECBP" == 1 ]] && install_optional_skill openai/skills@security-best-practices security-best-practices
 fi
 
 step "Finalizing"

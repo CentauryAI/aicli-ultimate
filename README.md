@@ -69,7 +69,7 @@ Bundled marketplace plugins:
 - `orquestrator`: pure multi-agent delegation through HCOM;
 - `apollo-rust-best-practices`: Apollo GraphQL guidance for idiomatic Rust, ownership, errors, Clippy, performance, testing, and documentation.
 
-The installer can also add official Superpowers and Codex Security, plus optional frontend, Playwright, and React skills.
+The installer can also add official Superpowers and Codex Security, plus optional skills: frontend, Playwright, React, web-app testing (Anthropic), MCP builder (Anthropic), grill-with-docs plan grilling with ADR docs, and security best practices (OpenAI). Optional skills install only into the CLIs selected for this setup.
 
 Claude plugins include their upstream `SessionStart`, `UserPromptSubmit`, and subagent hooks. OpenCode and OMP use Ponytail's official host adapters. Caveman has no upstream OpenCode or OMP lifecycle plugin, so those hosts use the same global always-on rule and portable skills instead of a fake compatibility layer. Existing native plugins are detected and preserved; uninstall removes or disables only integrations enabled by AI CLI Ultimate.
 
