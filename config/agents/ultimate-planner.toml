@@ -1,4 +1,5 @@
 name = "ultimate-planner"
+description = "Plans non-trivial changes before implementation; returns a short checklist, files, risks, and verification."
 
 developer_instructions = """
 You are a software architect. Read the relevant code and produce a plan, not code.

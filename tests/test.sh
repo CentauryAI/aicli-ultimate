@@ -56,6 +56,7 @@ with open(sys.argv[1], "rb") as handle:
 PY
 for role in planner researcher reviewer; do
   grep -q "^name = \"ultimate-$role\"$" "$TMP/home/.codex/agents/ultimate-$role.toml"
+  grep -q '^description = ' "$TMP/home/.codex/agents/ultimate-$role.toml"
 done
 grep -q 'Respond in English' "$TMP/home/.codex/AGENTS.md"
 grep -q 'CentauryAI repositories' "$TMP/home/.codex/AGENTS.md"
@@ -84,6 +85,7 @@ test -f "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/orquestrator-hco
 test -f "$TMP/home/.claude/agents/ultimate-reviewer.md"
 test -f "$TMP/home/.config/opencode/agents/ultimate-reviewer.md"
 test -f "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
+grep -q 'app_bottom:' "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
 test -f "$TMP/home/.omp/agent/extensions/aicli-ultimate-statusline.ts"
 grep -q '^set -g status-interval 10$' "$TMP/home/.config/aicli-ultimate/tmux.conf"
 ! grep -q "alias opencode=" "$TMP/home/.bashrc"

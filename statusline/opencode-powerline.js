@@ -68,9 +68,7 @@ export default {
     api.slots.register({
       order: 100,
       slots: {
-        home_bottom: () => make("home"),
-        session_prompt_right: () => make("session"),
-        sidebar_footer: () => make("sidebar"),
+        app_bottom: () => make("app"),
       },
     })
   },
