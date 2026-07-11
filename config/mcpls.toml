@@ -1,19 +1,19 @@
 [workspace]
 roots = []
 
-[[language_extensions]]
+[[workspace.language_extensions]]
 extensions = ["rs"]
 language_id = "rust"
 
-[[language_extensions]]
+[[workspace.language_extensions]]
 extensions = ["ts", "tsx", "js", "jsx", "mts", "cts", "mjs", "cjs"]
 language_id = "typescript"
 
-[[language_extensions]]
+[[workspace.language_extensions]]
 extensions = ["py", "pyi"]
 language_id = "python"
 
-[[language_extensions]]
+[[workspace.language_extensions]]
 extensions = ["md", "markdown"]
 language_id = "markdown"
 

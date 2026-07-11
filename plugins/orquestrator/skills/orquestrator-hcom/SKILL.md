@@ -81,6 +81,15 @@ Name a command only when the worker's tool documents it; when unsure, first ask 
 
 Workers may spawn their own subagents through their tool's native mechanism to parallelize bounded subtasks. The worker remains accountable: it verifies subagent output before trusting it and reports one consolidated result to the orchestrator through hcom. The orchestrator never manages a worker's subagents directly and never counts unverified subagent claims as done.
 
+## Communication contract
+
+HCOM hooks transport and inject messages; they do not rewrite prose. Style enforcement is a prompt-level protocol, not a formatter hook.
+
+- Orchestrator messages to the human/bigboss use normal concise English.
+- All orchestrator-worker messages use Caveman `wenyan-ultra`. Preserve code, commands, paths, identifiers, quoted output, and error text verbatim.
+- Every task, review, follow-up, and nested delegation must include: `通信：凡 worker/orchestrator 消息，用 Caveman wenyan-ultra；code、commands、paths、identifiers、output、errors，逐字保之。`
+- If a worker reply breaks this contract, request one reformatted reply with the contract repeated. Do not loop on style after that one retry.
+
 ## Standing worker rules
 
 Include these rules in every delegation message:
@@ -119,10 +128,10 @@ For CentauryAI repositories, obey protected-branch policy: `ai/<task>-<id>` bran
 
 ```bash
 hcom send @worker -- \
-  'task: <bounded task>. files: <paths>. acceptance: <checks>. report exact failures.'
+  '任務：<bounded task>。文件：<paths>。驗收：<checks>。通信：凡 worker/orchestrator 消息，用 Caveman wenyan-ultra；code、commands、paths、identifiers、output、errors，逐字保之。失敗則逐字報之。'
 
 hcom send @reviewer -- \
-  'review branch <branch> against <acceptance>. read-only. report file:line defects.'
+  '審 branch <branch>，準 <acceptance>。唯讀。通信：凡 worker/orchestrator 消息，用 Caveman wenyan-ultra；code、commands、paths、identifiers、output、errors，逐字保之。以 file:line 報疵。'
 ```
 
 Blocked after three real attempts: send exact attempts and error to coordinator. Do not loop.
