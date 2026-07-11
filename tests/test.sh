@@ -105,6 +105,42 @@ test -f "$TMP/home/.agents/skills/rust-best-practices/SKILL.md"
 test -f "$TMP/home/.agents/skills/rust-best-practices/references/chapter_09.md"
 test -f "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/rust-best-practices/SKILL.md"
 test -f "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/rust-best-practices/references/chapter_09.md"
+force_delete_re='(^|[-*#]+[[:space:]]+|[.;:][[:space:]]+)(Run|Use|Prefer)[[:space:]].*git branch -D'
+printf '%s\n' '- Run `git branch -D topic`.' >"$TMP/force-delete-recommendation.md"
+printf '%s\n' '- Never use `git branch -D`.' >"$TMP/force-delete-prohibition.md"
+grep -Eq "$force_delete_re" "$TMP/force-delete-recommendation.md"
+! grep -Eq "$force_delete_re" "$TMP/force-delete-prohibition.md"
+for instructions in \
+  "$TMP/home/.codex/AGENTS.md" \
+  "$TMP/home/.claude/CLAUDE.md" \
+  "$TMP/home/.config/opencode/AGENTS.md" \
+  "$TMP/home/AGENTS.md"; do
+  grep -q 'pull request state as `MERGED`' "$instructions"
+  grep -q 'git push --force-with-lease=refs/heads/<branch>:<headRefOid> <remote> --delete <branch>' "$instructions"
+  grep -q 'narrow lease authorizes only the guarded deletion' "$instructions"
+  grep -q 'git branch -d <branch>' "$instructions"
+  ! grep -Eq 'gh pr merge[^`]*--delete-branch' "$instructions"
+  ! grep -Eq "$force_delete_re" "$instructions"
+done
+for skill in \
+  "$TMP/home/.claude/skills/centaury-branch-workflow/SKILL.md" \
+  "$TMP/home/.agents/skills/centaury-branch-workflow/SKILL.md" \
+  "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/centaury-branch-workflow/SKILL.md"; do
+  grep -q 'Confirm GitHub reports the pull request state as `MERGED`' "$skill"
+  grep -q 'git push --force-with-lease=refs/heads/<branch>:<headRefOid> <remote> --delete <branch>' "$skill"
+  grep -q 'narrow lease authorizes deletion only while the remote ref still equals' "$skill"
+  grep -q 'Never use `git branch -D`' "$skill"
+  ! grep -Eq 'gh pr merge[^`]*--delete-branch' "$skill"
+  ! grep -Eq "$force_delete_re" "$skill"
+done
+for skill in \
+  "$TMP/home/.claude/skills/orquestrator-hcom/SKILL.md" \
+  "$TMP/home/.agents/skills/orquestrator-hcom/SKILL.md" \
+  "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/orquestrator-hcom/SKILL.md"; do
+  grep -q 'Delegate only task-branch-correctable sync or integration failures' "$skill"
+  grep -q 'reviewer who is different from the implementer/resolver' "$skill"
+  grep -q 'Do not delegate permission failures, missing approvals, required-check failures, ruleset blocks' "$skill"
+done
 test -f "$TMP/home/.claude/agents/ultimate-reviewer.md"
 test -f "$TMP/home/.config/opencode/agents/ultimate-reviewer.md"
 test -f "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"

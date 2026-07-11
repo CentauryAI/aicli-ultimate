@@ -68,9 +68,12 @@ HCOM syntax changes between versions. The installed CLI is authoritative; the up
 2. Split into independent, bounded tasks with file ownership.
 3. Send each worker exact scope, branch, acceptance criteria, and checks.
 4. Track progress through hcom events. Do not poll with `sleep`.
-5. Give completed work to a different reviewer.
-6. Integrate only after review and repository checks pass.
-7. Report outcome, failures, branches, PRs, and remaining risk.
+5. Delegate only task-branch-correctable sync or integration failures, such as code conflicts, back to the original implementer with the exact errors. Have that agent resolve them on the task branch; do not edit in the orchestrator thread.
+6. Give the resolved branch to a reviewer who is different from the implementer/resolver.
+7. Integrate only after independent review and repository checks pass on the resolved branch.
+8. Do not delegate permission failures, missing approvals, required-check failures, ruleset blocks, or other repository-policy failures as merge-resolution work. Report the exact external blocker and leave the pull request unmerged.
+9. If the intended combined behavior is unclear, conflicts cannot be resolved safely, or review rejects the result, leave the pull request draft/unmerged and report the exact evidence and decision needed.
+10. After GitHub confirms the pull request state is `MERGED`, remove the task branch according to repository policy. Report cleanup failures separately from the merge; never delete a protected or unmerged branch.
 
 For CentauryAI repositories, obey protected-branch policy: `ai/<task>-<id>` branch, PR-only integration, no direct default-branch commits or pushes.
 
