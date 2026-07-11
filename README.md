@@ -5,10 +5,10 @@ Portable, interactive setup for Codex, Claude Code, OpenCode, OMP (Oh My Pi), an
 ## Install
 
 ```bash
-curl -fsSL https://github.com/CentauryAI/aicli-ultimate/releases/latest/download/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/CentauryAI/aicli-ultimate/main/install.sh | bash
 ```
 
-The command pulls the latest published [release](https://github.com/CentauryAI/aicli-ultimate/releases). To track `main` instead, swap in `https://raw.githubusercontent.com/CentauryAI/aicli-ultimate/main/install.sh`; set `AICLI_ULTIMATE_REF=vX.Y.Z` to pin a specific release tag.
+The installer pulls the latest published [release](https://github.com/CentauryAI/aicli-ultimate/releases) bundle when one exists and falls back to the `main` branch otherwise. Set `AICLI_ULTIMATE_REF=vX.Y.Z` to pin a specific release tag.
 
 The installer detects installed CLIs and asks which ones to configure. Safe defaults enable:
 
@@ -32,7 +32,7 @@ Existing files are copied to `~/.config/aicli-ultimate/backups/<timestamp>` befo
 ```bash
 AICLI_ULTIMATE_NONINTERACTIVE=1 \
 AICLI_ULTIMATE_TARGETS=codex,claude,opencode,omp,antigravity \
-  curl -fsSL https://github.com/CentauryAI/aicli-ultimate/releases/latest/download/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/CentauryAI/aicli-ultimate/main/install.sh | bash
 ```
 
 `AICLI_ULTIMATE_TARGETS` accepts any comma-separated subset of `codex`, `claude`, `opencode`, `omp`, and `antigravity`. Other optional variables include `AICLI_ULTIMATE_LSP=0|1`, `AICLI_ULTIMATE_EFFORT`, `CODEX_HOME`, `AICLI_ULTIMATE_REF`, `AICLI_ULTIMATE_INSTALL_DIR`, and `AICLI_ULTIMATE_BIN_DIR`.
