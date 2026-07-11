@@ -4,7 +4,6 @@
       "command": "@MCPLS_BIN@",
       "args": ["--config", "@MCPLS_CONFIG@"],
       "disabledTools": [
-        "get_completions",
         "get_document_symbols",
         "get_cached_diagnostics",
         "format_document",

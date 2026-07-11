@@ -110,10 +110,11 @@ remove_hcom_hooks() {
 remove_native_plugins() {
   local native="$CONFIG_HOME/native-plugins" marker plugin tool
   if command -v claude >/dev/null 2>&1; then
-    for tool in caveman ponytail rust-analyzer-lsp typescript-lsp pyright-lsp; do
+    for tool in caveman ponytail rust-analyzer-lsp typescript-lsp pyright-lsp github-lsp; do
       marker="$native/claude-installed-$tool"
       if [[ -f "$marker" ]]; then
         case "$tool" in
+          github-lsp) plugin="$tool@aicli-ultimate" ;;
           *-lsp) plugin="$tool@claude-plugins-official" ;;
           *) plugin="$tool@$tool" ;;
         esac
@@ -122,6 +123,7 @@ remove_native_plugins() {
         marker="$native/claude-enabled-$tool"
         if [[ -f "$marker" ]]; then
           case "$tool" in
+            github-lsp) plugin="$tool@aicli-ultimate" ;;
             *-lsp) plugin="$tool@claude-plugins-official" ;;
             *) plugin="$tool@$tool" ;;
           esac
@@ -143,6 +145,13 @@ remove_native_plugins() {
       && ! -f "$native/claude-enabled-pyright-lsp" ]]; then
       remove_owned_integration "$marker" "Claude official plugin marketplace" \
         claude plugin marketplace remove claude-plugins-official
+    fi
+    marker="$native/claude-marketplace-aicli-ultimate"
+    if [[ -f "$marker" \
+      && ! -f "$native/claude-installed-github-lsp" \
+      && ! -f "$native/claude-enabled-github-lsp" ]]; then
+      remove_owned_integration "$marker" "Claude AI CLI Ultimate marketplace" \
+        claude plugin marketplace remove aicli-ultimate
     fi
   fi
   marker="$native/omp-ponytail"
@@ -205,6 +214,11 @@ remove_managed_block "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/AGENTS.md"
 remove_managed_block "$HOME/AGENTS.md"
 
 if [[ -f "$INSTALL_DIR/scripts/json_remove.py" ]]; then
+  if [[ -f "$INSTALL_DIR/scripts/json_lsp.py" ]]; then
+    python3 "$INSTALL_DIR/scripts/json_lsp.py" remove \
+      "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json" github-lsp \
+      "$CONFIG_HOME/opencode-github-lsp-state.json"
+  fi
   python3 "$INSTALL_DIR/scripts/json_remove.py" \
     "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/tui.json" theme '"tokyonight"'
   if [[ -f "$CONFIG_HOME/opencode-lsp-owned" ]]; then
@@ -234,6 +248,12 @@ if [[ -f "$INSTALL_DIR/scripts/json_array.py" ]]; then
     "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/tui.json" plugin "$legacy_opencode_plugin_json"
 fi
 if [[ -f "$INSTALL_DIR/scripts/json_object_remove.py" ]]; then
+  if [[ -f "$CONFIG_HOME/omp-github-lsp-owned" ]]; then
+    omp_lsp_json='{"command":"github-lsp","args":[],"fileTypes":[".md",".markdown"],"rootMarkers":[".git"]}'
+    python3 "$INSTALL_DIR/scripts/json_object_remove.py" \
+      "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/lsp.json" servers github-lsp "$omp_lsp_json"
+    rm -f "$CONFIG_HOME/omp-github-lsp-owned"
+  fi
   python3 "$INSTALL_DIR/scripts/json_object_remove.py" \
     "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/package.json" dependencies '@opentui/core' '"*"'
 fi
@@ -292,6 +312,7 @@ remove_generated_file "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/extensions/aicli
 remove_generated_file "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/hooks/aicli-ultimate-statusline.ts" "$INSTALL_DIR/statusline/omp-powerline.ts"
 remove_generated_file "$BIN_DIR/antigravity-ultimate-status" "$INSTALL_DIR/statusline/antigravity-powerline"
 remove_generated_file "$BIN_DIR/aicli-mcpls" "$INSTALL_DIR/config/mcpls.toml"
+remove_generated_file "$BIN_DIR/github-lsp" "$INSTALL_DIR/plugins/github-lsp/.lsp.json"
 remove_generated_file "$CONFIG_HOME/mcpls.toml" "$INSTALL_DIR/config/mcpls.toml"
 
 backup=""

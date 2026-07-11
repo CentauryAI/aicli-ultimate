@@ -1,0 +1,16 @@
+{
+  "name": "aicli-ultimate",
+  "description": "Language-server integration maintained by AI CLI Ultimate.",
+  "owner": {
+    "name": "CentauryAI"
+  },
+  "plugins": [
+    {
+      "name": "github-lsp",
+      "description": "GitHub Markdown completions and hover information for Claude Code.",
+      "version": "1.0.0",
+      "source": "./plugins/github-lsp",
+      "category": "development"
+    }
+  ]
+}

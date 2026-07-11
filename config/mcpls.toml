@@ -13,6 +13,10 @@ language_id = "typescript"
 extensions = ["py", "pyi"]
 language_id = "python"
 
+[[language_extensions]]
+extensions = ["md", "markdown"]
+language_id = "markdown"
+
 [[lsp_servers]]
 language_id = "rust"
 command = "rust-analyzer"
@@ -30,3 +34,9 @@ language_id = "python"
 command = "pyright-langserver"
 args = ["--stdio"]
 file_patterns = ["**/*.py", "**/*.pyi"]
+
+[[lsp_servers]]
+language_id = "markdown"
+command = "github-lsp"
+args = []
+file_patterns = ["**/*.md", "**/*.markdown"]
