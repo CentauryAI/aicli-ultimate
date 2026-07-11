@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+payload="$(cat)"
+readarray -t data < <(jq -r '
+  (.agent_state // "idle"),
+  (.model.display_name // "Antigravity"),
+  (.cwd // "~"),
+  (.vcs.branch // "no-git"),
+  (.vcs.dirty // false),
+  (.context_window.used_percentage // 0),
+  (.task_count // 0),
+  (.artifact_count // 0)
+' <<<"$payload" 2>/dev/null || printf 'idle\nAntigravity\n~\nno-git\nfalse\n0\n0\n0\n')
+
+state="${data[0]:-idle}"
+model="${data[1]:-Antigravity}"
+directory="${data[2]:-~}"
+branch="${data[3]:-no-git}"
+dirty="${data[4]:-false}"
+used="${data[5]:-0}"
+tasks="${data[6]:-0}"
+artifacts="${data[7]:-0}"
+directory="${directory##*/}"
+[[ "$dirty" == true ]] && branch="${branch}*"
+used_int="${used%.*}"
+[[ "$used_int" =~ ^[0-9]+$ ]] || used_int=0
+(( used_int > 100 )) && used_int=100
+
+mode_file="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate/modes"
+modes=standard
+if [[ -f "$mode_file" ]]; then
+  active=()
+  value="$(sed -n 's/^caveman=//p' "$mode_file" | head -1)"
+  [[ -n "$value" && "$value" != off ]] && active+=(caveman)
+  value="$(sed -n 's/^ponytail=//p' "$mode_file" | head -1)"
+  [[ -n "$value" && "$value" != off ]] && active+=(ponytail)
+  ((${#active[@]})) && modes="$(IFS=+; printf '%s' "${active[*]}")"
+fi
+
+if [[ -n "${NO_COLOR:-}" ]]; then
+  printf ' Antigravity | %s | %s | %s | %s\n' "$state" "$model" "$directory" "$branch"
+  printf ' context %s%% | tasks %s | artifacts %s | %s\n' "$used_int" "$tasks" "$artifacts" "$modes"
+  exit 0
+fi
+
+reset=$'\033[0m'
+dark='26;27;38'
+blue='122;162;247'
+cyan='125;207;255'
+green='158;206;106'
+purple='187;154;247'
+yellow='224;175;104'
+muted='86;95;137'
+fg() { printf '\033[38;2;%sm' "$1"; }
+bg() { printf '\033[48;2;%sm' "$1"; }
+
+case "$state" in
+  idle) state_color="$green" ;;
+  thinking) state_color="$yellow" ;;
+  working|tool_use) state_color="$cyan" ;;
+  *) state_color="$purple" ;;
+esac
+
+printf '%s%s Antigravity %s%s%s' "$(fg "$dark")" "$(bg "$blue")" "$reset" "$(fg "$blue")" "$reset"
+printf '%s %s %s%s%s' "$(fg "$state_color")" "$state" "$reset" "$(fg "$muted")" "$reset"
+printf '%s %s %s%s%s' "$(fg "$purple")" "$model" "$reset" "$(fg "$muted")" "$reset"
+printf '%s %s %s%s%s' "$(fg "$cyan")" "$directory" "$reset" "$(fg "$muted")" "$reset"
+printf '%s  %s %s\n' "$(fg "$green")" "$branch" "$reset"
+printf '%s context %s%%%s %s%s' "$(fg "$blue")" "$used_int" "$reset" "$(fg "$muted")" "$reset"
+printf '%s tasks %s %s%s%s' "$(fg "$yellow")" "$tasks" "$reset" "$(fg "$muted")" "$reset"
+printf '%s artifacts %s %s%s%s' "$(fg "$cyan")" "$artifacts" "$reset" "$(fg "$muted")" "$reset"
+printf '%s %s %s\n' "$(fg "$purple")" "$modes" "$reset"
