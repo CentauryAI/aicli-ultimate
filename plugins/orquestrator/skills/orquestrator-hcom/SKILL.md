@@ -53,10 +53,48 @@ HCOM syntax changes between versions. The installed CLI is authoritative; the up
 7. Include the same help-first rule in worker prompts when workers may call HCOM themselves.
 8. Clean up only coordinator-owned agents, using the exact names returned at launch and the cleanup command documented by local help.
 
+## Worker provisioning
+
+The orchestrator may install skills into a worker's tool before delegating, using the `skills` CLI from the terminal:
+
+```bash
+npx skills add <owner>/<repo>@<skill> -g -y -a <agent-id>
+```
+
+Tool to agent-id map: `claude` -> `claude-code`, `codex` -> `codex`, `opencode` -> `opencode`, `omp` -> `pi`, `antigravity` -> `antigravity-cli`.
+
+1. Install only skills the current task needs, from sources the user already trusts; ask before adding anything else.
+2. Provision before launching the worker; a running session may not pick up new skills.
+3. Verify the install output reports success for the targeted agent before relying on the skill.
+
+## Worker commands
+
+Workers execute their own native commands (`/code-review`, `/debug`, and similar) when the delegation message names them:
+
+```bash
+hcom send @worker -- 'run /code-review on branch <branch>; report findings as file:line.'
+```
+
+Name a command only when the worker's tool documents it; when unsure, first ask the worker to list its available commands/skills. Never invent command names.
+
+## Nested delegation
+
+Workers may spawn their own subagents through their tool's native mechanism to parallelize bounded subtasks. The worker remains accountable: it verifies subagent output before trusting it and reports one consolidated result to the orchestrator through hcom. The orchestrator never manages a worker's subagents directly and never counts unverified subagent claims as done.
+
+## Standing worker rules
+
+Include these rules in every delegation message:
+
+1. Before implementing, create `WALKTHROUGH.md` on the task branch: intended steps, files to touch, checks to run.
+2. Record every non-obvious choice in `DECISIONS.md`: what, why, alternatives rejected.
+3. Report exact failing commands and verbatim errors; never summarize failures away.
+4. Stay within the assigned file ownership and scope; ask before expanding.
+5. Follow repository branch/PR policy; never commit to protected branches.
+
 ## Contract
 
 - Delegate implementation, investigation, and review through `hcom send`.
-- Use terminal only for hcom, read-only inspection, Git coordination, and verification.
+- Use terminal only for hcom, worker provisioning (`skills` CLI), read-only inspection, Git coordination, and verification.
 - Never edit implementation files in orchestrator thread.
 - Never hardcode agent names. Read names from `hcom list` or launch output.
 - Monitor with `hcom events`; read full transcripts only when evidence is needed.
@@ -66,7 +104,7 @@ HCOM syntax changes between versions. The installed CLI is authoritative; the up
 
 1. Inspect scope and repository policy.
 2. Split into independent, bounded tasks with file ownership.
-3. Send each worker exact scope, branch, acceptance criteria, and checks.
+3. Send each worker exact scope, branch, acceptance criteria, checks, and the standing worker rules.
 4. Track progress through hcom events. Do not poll with `sleep`.
 5. Delegate only task-branch-correctable sync or integration failures, such as code conflicts, back to the original implementer with the exact errors. Have that agent resolve them on the task branch; do not edit in the orchestrator thread.
 6. Give the resolved branch to a reviewer who is different from the implementer/resolver.
