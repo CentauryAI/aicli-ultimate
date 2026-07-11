@@ -12,3 +12,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run test suite
         run: bash tests/test.sh
+
+  tui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test aicli-tui
+        run: |
+          cargo build --release --manifest-path tui/Cargo.toml
+          cargo test --manifest-path tui/Cargo.toml

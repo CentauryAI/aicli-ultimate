@@ -3,7 +3,9 @@ name: release
 # Push a semver tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`) to build a
 # bundle from the repo at that tag and publish it as a GitHub Release. install.sh
 # and resolve_source pull from `releases/latest/download/*`, so the released
-# bundle is exactly the repo contents at the tag.
+# bundle is exactly the repo contents at the tag. The tui job cross-builds the
+# aicli-tui setup binary (ratatui) per platform; install.sh downloads the asset
+# matching `uname -s`/`uname -m` and falls back to whiptail if unavailable.
 on:
   push:
     tags:
@@ -13,7 +15,44 @@ permissions:
   contents: write
 
 jobs:
+  tui:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            asset: aicli-tui-linux-x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            asset: aicli-tui-linux-aarch64
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+            asset: aicli-tui-darwin-arm64
+          - runner: macos-latest
+            target: x86_64-apple-darwin
+            asset: aicli-tui-darwin-x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install musl toolchain
+        if: startsWith(matrix.runner, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build aicli-tui
+        run: |
+          rustup target add "${{ matrix.target }}"
+          cargo build --release --target "${{ matrix.target }}" \
+            --manifest-path tui/Cargo.toml
+          cp "tui/target/${{ matrix.target }}/release/aicli-tui" "${{ matrix.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
   release:
+    needs: tui
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +65,10 @@ jobs:
           printf '%s\n' "$GITHUB_REF_NAME" > pkg/aicli-ultimate/VERSION
           tar -czf aicli-ultimate.tar.gz -C pkg aicli-ultimate
 
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -34,4 +77,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
-            install.sh uninstall.sh aicli-ultimate.tar.gz
+            install.sh uninstall.sh aicli-ultimate.tar.gz aicli-tui-*
