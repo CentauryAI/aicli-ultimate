@@ -9,6 +9,21 @@ for script in "$ROOT/install.sh" "$ROOT/uninstall.sh" "$ROOT/statusline/codex-po
   bash -n "$script"
 done
 
+# Optional metric tools must not disable or spam the Codex Powerline.
+mkdir -p "$TMP/status-bin" "$TMP/status-home/.config/aicli-ultimate"
+for command in awk date head mkdir mv rmdir sed stat tail tr wc; do
+  ln -s "$(command -v "$command")" "$TMP/status-bin/$command"
+done
+printf 'caveman=off\nponytail=off\n' >"$TMP/status-home/.config/aicli-ultimate/modes"
+PATH="$TMP/status-bin" \
+HOME="$TMP/status-home" \
+XDG_CONFIG_HOME="$TMP/status-home/.config" \
+XDG_CACHE_HOME="$TMP/status-home/.cache" \
+  /bin/bash "$ROOT/statusline/codex-powerline-status" 1 \
+  >"$TMP/status.out" 2>"$TMP/status.err"
+grep -q 'Codex' "$TMP/status.out"
+test ! -s "$TMP/status.err"
+
 python3 -m py_compile "$ROOT/scripts/"*.py
 python3 -m json.tool "$ROOT/.claude-plugin/marketplace.json" >/dev/null
 python3 -m json.tool "$ROOT/plugins/github-lsp/.claude-plugin/plugin.json" >/dev/null
@@ -201,6 +216,8 @@ test -f "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
 grep -q 'app_bottom:' "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
 test -f "$TMP/home/.omp/agent/extensions/aicli-ultimate-statusline.ts"
 grep -q '^set -g status-interval 10$' "$TMP/home/.config/aicli-ultimate/tmux.conf"
+grep -q '^set -g mouse on$' "$TMP/home/.config/aicli-ultimate/tmux.conf"
+grep -q '^bind-key -T root WheelUpPane copy-mode -e$' "$TMP/home/.config/aicli-ultimate/tmux.conf"
 ! grep -q "alias opencode=" "$TMP/home/.bashrc"
 ! grep -q "alias omp=" "$TMP/home/.bashrc"
 ! grep -q "alias agy=" "$TMP/home/.bashrc"
