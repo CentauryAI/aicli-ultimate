@@ -23,6 +23,7 @@ jobs:
           mkdir -p pkg/aicli-ultimate
           tar --exclude=.git --exclude=.github --exclude=./pkg -cf - . \
             | tar -xf - -C pkg/aicli-ultimate
+          printf '%s\n' "$GITHUB_REF_NAME" > pkg/aicli-ultimate/VERSION
           tar -czf aicli-ultimate.tar.gz -C pkg aicli-ultimate
 
       - name: Publish release
