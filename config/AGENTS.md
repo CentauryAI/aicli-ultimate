@@ -25,6 +25,18 @@
 - Treat security, data loss, authentication, permissions, and migrations as high-risk areas.
 - In reviews, report actionable defects with a concrete failure scenario and file/line evidence.
 
+## HCOM command discipline
+
+Apply these rules whenever using HCOM, whether coordinating or working as a delegated agent:
+
+- Treat the installed CLI as the syntax authority. Run `hcom --help` before the first HCOM operation in a workflow and `hcom <command> --help` before using an unfamiliar command or flag. Use `hcom run docs --cli` for the installed full reference.
+- Never invent subcommands, aliases, flags, argument order, agent names, tags, or batch identifiers. Documentation from another HCOM version is context only when local help differs.
+- Discover live agents with `hcom list` or `hcom list --json`. Address only exact names or tags returned by HCOM.
+- For messages, preserve the documented separator: `hcom send @name -- <message>`. Put HCOM flags before `--`; everything after it is message text.
+- Before spawning, read the selected tool's launch help, use only listed flags, and capture names from launch output. Never guess a spawned agent's name.
+- Use HCOM event/listen commands documented by local help instead of `sleep`. On syntax failure, report the exact error and consult help; do not retry with guessed variants.
+- Kill only agents created for the current workflow. Never kill, stop, resume, or reconfigure pre-existing agents without user authorization.
+
 ## CentauryAI repositories
 
 Apply this policy whenever any Git remote belongs to the `CentauryAI` organization or its legacy `CentuaryAI` spelling:

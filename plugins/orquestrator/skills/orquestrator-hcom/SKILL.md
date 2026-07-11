@@ -9,7 +9,7 @@ Coordinate work. Do not implement code in this thread while mode is active.
 
 ## Start
 
-1. Run `hcom status`, then `hcom list`.
+1. Run `hcom --help`, `hcom status`, then `hcom list`.
 2. If no suitable agents exist, ask user before spawning new external agents.
 3. State active agents, task split, and merge owner to user.
 
@@ -39,6 +39,19 @@ Unknown tools have no default capability. Use them only when their live `descrip
 6. If the preferred tool is unavailable, use only a compatible fallback and state the quality, cost, or modality tradeoff. If no compatible live agent exists, ask before spawning one.
 
 Examples: bulk project rename -> Claude; ordinary API implementation -> OMP or OpenCode according to complexity; screenshot-driven UI -> Antigravity; authentication threat review -> Codex. Split mixed tasks so frontend goes to Antigravity and complex backend/security goes to Codex.
+
+## Command protocol
+
+HCOM syntax changes between versions. The installed CLI is authoritative; the upstream reference is <https://github.com/aannoo/hcom>.
+
+1. Before using a command or flag not shown below, run `hcom <command> --help`. For the full installed reference, run `hcom run docs --cli`.
+2. Never guess a launch alias or flag. Run the selected tool's launch help, then use the exact syntax it lists: `hcom [N] <tool> [hcom flags] [tool arguments]`.
+3. Read the launch result. Use only names, tags, and batch identifiers HCOM actually returns; confirm readiness with the documented launch result or event command. Never use `sleep`.
+4. Refresh `hcom list --json` before assignment because names and status can change.
+5. Send a direct task with `hcom send @exact-name -- '<message>'`. Keep every HCOM flag before `--`; message text goes after it.
+6. If a command fails validation, preserve the exact error, consult that command's help, and correct it from documented syntax. Do not improvise a replacement command.
+7. Include the same help-first rule in worker prompts when workers may call HCOM themselves.
+8. Clean up only coordinator-owned agents, using the exact names returned at launch and the cleanup command documented by local help.
 
 ## Contract
 
