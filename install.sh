@@ -815,7 +815,7 @@ ask "Install optional Playwright testing skill?" n && PLAYWRIGHT=1 || PLAYWRIGHT
 ask "Install optional React best-practices skill?" n && REACT=1 || REACT=0
 ask "Install optional web-app testing skill (Anthropic)?" n && WEBAPP=1 || WEBAPP=0
 ask "Install optional MCP builder skill (Anthropic)?" n && MCPBUILDER=1 || MCPBUILDER=0
-ask "Install optional plan-interrogation skill (grill-me)?" n && GRILLME=1 || GRILLME=0
+ask "Install optional plan-grilling skill with ADR docs (grill-with-docs)?" n && GRILLDOCS=1 || GRILLDOCS=0
 ask "Install optional security best-practices skill (OpenAI)?" n && SECBP=1 || SECBP=0
 if [[ "$TARGET_CODEX" == 1 ]]; then
   ask "Install the official Codex Security plugin?" n && SECURITY=1 || SECURITY=0
@@ -823,7 +823,7 @@ else
   SECURITY=0
 fi
 
-OPTIONAL_SKILLS=$((FRONTEND + PLAYWRIGHT + REACT + WEBAPP + MCPBUILDER + GRILLME + SECBP))
+OPTIONAL_SKILLS=$((FRONTEND + PLAYWRIGHT + REACT + WEBAPP + MCPBUILDER + GRILLDOCS + SECBP))
 # The "Optional skills" step only runs when selected outside dry-run.
 [[ "$DRY_RUN" != 1 ]] && (( OPTIONAL_SKILLS > 0 )) || STEP_TOTAL=7
 
@@ -1079,7 +1079,12 @@ if [[ "$DRY_RUN" != 1 ]] && (( OPTIONAL_SKILLS > 0 )); then
   [[ "$REACT" == 1 ]] && install_optional_skill vercel-labs/agent-skills@vercel-react-best-practices vercel-react-best-practices
   [[ "$WEBAPP" == 1 ]] && install_optional_skill anthropics/skills@webapp-testing webapp-testing
   [[ "$MCPBUILDER" == 1 ]] && install_optional_skill anthropics/skills@mcp-builder mcp-builder
-  [[ "$GRILLME" == 1 ]] && install_optional_skill mattpocock/skills@grill-me grill-me
+  if [[ "$GRILLDOCS" == 1 ]]; then
+    # grill-with-docs delegates to the /grilling and /domain-modeling skills.
+    install_optional_skill mattpocock/skills@grill-with-docs grill-with-docs
+    install_optional_skill mattpocock/skills@grilling grilling
+    install_optional_skill mattpocock/skills@domain-modeling domain-modeling
+  fi
   [[ "$SECBP" == 1 ]] && install_optional_skill openai/skills@security-best-practices security-best-practices
 fi
 
