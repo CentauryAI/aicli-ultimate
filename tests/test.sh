@@ -49,6 +49,8 @@ test -x "$TMP/home/.local/bin/claude-ultimate-status"
 test -x "$TMP/home/.local/bin/antigravity-ultimate-status"
 grep -q -- '--profile' "$TMP/home/.local/bin/aicli-ultimate"
 grep -q 'model_reasoning_effort = "xhigh"' "$TMP/home/.codex/aicli-ultimate.config.toml"
+grep -q '^\[mcp_servers.aicli_lsp\]$' "$TMP/home/.codex/aicli-ultimate.config.toml"
+grep -q '^enabled = true$' "$TMP/home/.codex/aicli-ultimate.config.toml"
 python3 - "$TMP/home/.codex/aicli-ultimate.config.toml" <<'PY'
 import sys, tomllib
 with open(sys.argv[1], "rb") as handle:
@@ -70,12 +72,25 @@ jq -e '(.plugin | length) == 2 and (.plugin[1] | endswith("/aicli-ultimate/statu
   "$TMP/home/.config/opencode/tui.json" >/dev/null
 jq -e '.plugin == ["existing-server-plugin", "@dietrichgebert/ponytail"]' \
   "$TMP/home/.config/opencode/opencode.json" >/dev/null
+jq -e '.lsp == true and .permission.lsp == "allow"' \
+  "$TMP/home/.config/opencode/opencode.json" >/dev/null
 jq -e '.dependencies["@opentui/core"] == "*"' "$TMP/home/.config/opencode/package.json" >/dev/null
 jq -e '.custom == "preserved" and (.statusLine.command | endswith("/claude-ultimate-status"))' \
   "$TMP/home/.claude/settings.json" >/dev/null
 jq -e '.custom == "preserved" and .statusLine.type == "" and .statusLine.enabled == true and (.statusLine.command | endswith("/antigravity-ultimate-status"))' \
   "$TMP/home/.gemini/antigravity-cli/settings.json" >/dev/null
 grep -q '"name": "aicli-ultimate"' "$TMP/home/.gemini/config/plugins/aicli-ultimate/plugin.json"
+jq -e '.mcpServers["aicli-lsp"].command | endswith("/.local/bin/aicli-mcpls")' \
+  "$TMP/home/.gemini/config/plugins/aicli-ultimate/mcp_config.json" >/dev/null
+jq -e '.mcpServers["aicli-lsp"].disabledTools | length == 14' \
+  "$TMP/home/.gemini/config/plugins/aicli-ultimate/mcp_config.json" >/dev/null
+test -f "$TMP/home/.config/aicli-ultimate/mcpls.toml"
+python3 - "$TMP/home/.config/aicli-ultimate/mcpls.toml" <<'PY'
+import sys, tomllib
+with open(sys.argv[1], "rb") as handle:
+    config = tomllib.load(handle)
+assert [server["language_id"] for server in config["lsp_servers"]] == ["rust", "typescript", "python"]
+PY
 test -f "$TMP/home/.claude/skills/caveman/SKILL.md"
 test -f "$TMP/home/.agents/skills/ponytail/SKILL.md"
 test -f "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/centaury-branch-workflow/SKILL.md"
@@ -91,6 +106,9 @@ grep -q '^set -g status-interval 10$' "$TMP/home/.config/aicli-ultimate/tmux.con
 ! grep -q "alias opencode=" "$TMP/home/.bashrc"
 ! grep -q "alias omp=" "$TMP/home/.bashrc"
 ! grep -q "alias agy=" "$TMP/home/.bashrc"
+grep -q '^export OPENCODE_EXPERIMENTAL_LSP_TOOL=true$' "$TMP/home/.bashrc"
+grep -q '^lsp=enabled$' "$TMP/home/.config/aicli-ultimate/modes"
+grep -q 'Prefer native LSP tools' "$TMP/home/.codex/AGENTS.md"
 
 claude_payload='{"model":{"display_name":"Claude Test"},"workspace":{"current_dir":"'"$ROOT"'"},"context_window":{"used_percentage":42,"total_input_tokens":12000,"total_output_tokens":3456},"rate_limits":{"five_hour":{"used_percentage":25},"seven_day":{"used_percentage":50}}}'
 claude_status="$(printf '%s' "$claude_payload" | HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/home/.config" "$TMP/home/.local/bin/claude-ultimate-status")"
@@ -152,12 +170,32 @@ jq -e '.custom == "preserved" and .statusLine.command == "legacy-agy"' \
   "$TMP/home/.gemini/antigravity-cli/settings.json" >/dev/null
 jq -e '.plugin == ["existing-plugin"]' "$TMP/home/.config/opencode/tui.json" >/dev/null
 jq -e '.plugin == ["existing-server-plugin"]' "$TMP/home/.config/opencode/opencode.json" >/dev/null
+jq -e 'has("lsp") | not' "$TMP/home/.config/opencode/opencode.json" >/dev/null
+jq -e 'has("permission") | not' "$TMP/home/.config/opencode/opencode.json" >/dev/null
 test ! -e "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
 test ! -e "$TMP/home/.omp/agent/extensions/aicli-ultimate-statusline.ts"
+test ! -e "$TMP/home/.config/aicli-ultimate/mcpls.toml"
+
+mkdir -p "$TMP/no-lsp-home"
+HOME="$TMP/no-lsp-home" \
+XDG_CONFIG_HOME="$TMP/no-lsp-home/.config" \
+CODEX_HOME="$TMP/no-lsp-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/no-lsp-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/no-lsp-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+AICLI_ULTIMATE_DRY_RUN=1 \
+AICLI_ULTIMATE_LSP=0 \
+AICLI_ULTIMATE_TARGETS=codex \
+SHELL=/bin/bash \
+  "$ROOT/install.sh" >/dev/null
+grep -q '^enabled = false$' "$TMP/no-lsp-home/.codex/aicli-ultimate.config.toml"
+test ! -e "$TMP/no-lsp-home/.config/aicli-ultimate/mcpls.toml"
 
 mkdir -p "$TMP/preserved-home/.config/opencode"
 printf '{"plugin":["@dietrichgebert/ponytail"]}\n' \
   >"$TMP/preserved-home/.config/opencode/opencode.json"
+python3 "$ROOT/scripts/json_add.py" "$TMP/preserved-home/.config/opencode/opencode.json" lsp true
+python3 "$ROOT/scripts/json_add.py" "$TMP/preserved-home/.config/opencode/opencode.json" permission.lsp '"allow"'
 HOME="$TMP/preserved-home" \
 XDG_CONFIG_HOME="$TMP/preserved-home/.config" \
 CODEX_HOME="$TMP/preserved-home/.codex" \
@@ -175,7 +213,7 @@ AICLI_ULTIMATE_INSTALL_DIR="$TMP/preserved-home/.local/share/aicli-ultimate" \
 AICLI_ULTIMATE_BIN_DIR="$TMP/preserved-home/.local/bin" \
 AICLI_ULTIMATE_NONINTERACTIVE=1 \
   "$TMP/preserved-home/.local/share/aicli-ultimate/uninstall.sh" >/dev/null
-jq -e '.plugin == ["@dietrichgebert/ponytail"]' \
+jq -e '.plugin == ["@dietrichgebert/ponytail"] and .lsp == true and .permission.lsp == "allow"' \
   "$TMP/preserved-home/.config/opencode/opencode.json" >/dev/null
 
 mkdir -p "$TMP/failure-bin" "$TMP/failure-home/.config/aicli-ultimate/native-plugins"

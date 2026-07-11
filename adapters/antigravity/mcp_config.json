@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "aicli-lsp": {
+      "command": "@MCPLS_BIN@",
+      "args": ["--config", "@MCPLS_CONFIG@"],
+      "disabledTools": [
+        "get_completions",
+        "get_document_symbols",
+        "get_cached_diagnostics",
+        "format_document",
+        "rename_symbol",
+        "get_code_actions",
+        "prepare_call_hierarchy",
+        "get_incoming_calls",
+        "get_outgoing_calls",
+        "get_signature_help",
+        "go_to_type_definition",
+        "get_inlay_hints",
+        "get_server_logs",
+        "get_server_messages"
+      ]
+    }
+  }
+}
