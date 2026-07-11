@@ -11,6 +11,7 @@ CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
 INSTALL_DIR="${AICLI_ULTIMATE_INSTALL_DIR:-$HOME/.local/share/aicli-ultimate}"
 BIN_DIR="${AICLI_ULTIMATE_BIN_DIR:-$HOME/.local/bin}"
 STATE_FILE="$CONFIG_HOME/install-state.json"
+CODEX_SHIM="$CONFIG_HOME/codex-bin/codex"
 MCPLS_VERSION="0.3.7"
 GITHUB_LSP_VERSION="24.03.10"
 TEMP_DIR=""
@@ -503,7 +504,7 @@ install_mcpls() {
 }
 
 configure_shell() {
-  local rc marker_start='# >>> aicli-ultimate >>>' marker_end='# <<< aicli-ultimate <<<'
+  local rc path_value marker_start='# >>> aicli-ultimate >>>' marker_end='# <<< aicli-ultimate <<<'
   case "${SHELL##*/}" in
     zsh) rc="$HOME/.zshrc" ;;
     bash) rc="$HOME/.bashrc" ;;
@@ -518,10 +519,13 @@ configure_shell() {
   mv "$rc.tmp" "$rc"
   {
     printf '\n%s\n' "$marker_start"
-    printf 'export PATH="%s:$PATH"\n' "$BIN_DIR"
+    path_value="$BIN_DIR"
+    if [[ "$TARGET_CODEX" == 1 && -f "$CODEX_SHIM.aicli-ultimate-owned" ]]; then
+      path_value="$(dirname "$CODEX_SHIM"):$path_value"
+    fi
+    printf 'export PATH="%s:$PATH"\n' "$path_value"
     [[ "$TARGET_OPENCODE" == 1 && "$LSP" == 1 ]] \
       && printf 'export OPENCODE_EXPERIMENTAL_LSP_TOOL=true\n'
-    [[ "$TARGET_CODEX" == 1 ]] && printf "alias codex='aicli-ultimate'\n"
     if [[ "$COMPLETIONS" == 1 ]]; then
       if [[ "$TARGET_CODEX" == 1 && "${SHELL##*/}" == zsh ]]; then
         printf 'autoload -Uz compinit && compinit\n'
@@ -1102,6 +1106,7 @@ if [[ "$TARGET_ANTIGRAVITY" == 1 ]]; then
 fi
 backup_file "$BIN_DIR/aicli-ultimate" "$backup"
 backup_file "$BIN_DIR/aicli-ultimate-status" "$backup"
+backup_file "$CODEX_SHIM" "$backup"
 backup_file "$BIN_DIR/aicli-agent-status" "$backup"
 backup_file "$BIN_DIR/aicli-opencode" "$backup"
 backup_file "$BIN_DIR/aicli-omp" "$backup"
@@ -1145,16 +1150,16 @@ if [[ "$GITHUB_LSP_READY" == 1 && "$OFFLINE" != 1 ]]; then
 fi
 
 step "Configuring agents"
-codex_status_action=restore
-[[ "$TARGET_CODEX" == 1 && "$STATUSLINE" == 1 ]] && codex_status_action=install
-if ! python3 "$ROOT/scripts/codex_statusline.py" "$codex_status_action" \
-  "$CODEX_HOME/config.toml" "$CONFIG_HOME/codex-statusline-state.json"; then
-  warn "Keeping existing Codex config; native status line fallback could not be updated."
+if [[ -f "$CONFIG_HOME/codex-statusline-state.json" ]] \
+  && ! python3 "$ROOT/scripts/codex_statusline.py" restore \
+    "$CODEX_HOME/config.toml" "$CONFIG_HOME/codex-statusline-state.json"; then
+  warn "Keeping legacy Codex status line state; config changed after installation."
 fi
 if [[ "$TARGET_CODEX" == 1 ]]; then
   mkdir -p "$CODEX_HOME/agents" "$CODEX_HOME/themes"
   migrate_legacy_codex_roles
   status_value='status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-remaining", "five-hour-limit", "weekly-limit"]'
+  [[ "$CODEX_POWERLINE" == 1 ]] && status_value='# Native status line disabled; external Powerline wrapper is active.'
   [[ "$LSP" == 1 && "$BRIDGE_READY" == 1 ]] && lsp_enabled=true || lsp_enabled=false
   sed \
     -e "s|@EFFORT@|$EFFORT|" \
@@ -1264,6 +1269,7 @@ if [[ "$TARGET_CODEX" == 1 ]]; then
   sed "s|@STATUS_COMMAND@|$BIN_DIR/aicli-ultimate-status|g" \
     "$ROOT/statusline/tmux.conf" >"$CONFIG_HOME/tmux.conf"
   install_owned_file "$ROOT/statusline/codex-powerline" "$BIN_DIR/aicli-ultimate"
+  install_owned_file "$ROOT/statusline/codex-powerline" "$CODEX_SHIM"
   install_owned_file "$ROOT/statusline/codex-powerline-status" "$BIN_DIR/aicli-ultimate-status"
 fi
 
