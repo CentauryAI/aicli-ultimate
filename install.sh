@@ -1052,6 +1052,10 @@ if [[ "$TUI_DONE" != 1 ]]; then
 fi
 [[ "$EFFORT" =~ ^(xhigh|high|medium)$ ]] || die "invalid reasoning effort: $EFFORT"
 [[ "$TARGET_CODEX" == 1 && "$DRY_RUN" != 1 ]] && install_codex_if_missing
+CODEX_POWERLINE=0
+if [[ "$STATUSLINE" == 1 && "$TARGET_CODEX" == 1 ]] && command -v tmux >/dev/null 2>&1; then
+  CODEX_POWERLINE=1
+fi
 
 OPTIONAL_SKILLS=$((FRONTEND + PLAYWRIGHT + REACT + WEBAPP + MCPBUILDER + GRILLDOCS + SECBP + DIFFREVIEW + GHFIXCI))
 # The "Optional skills" step only runs when selected outside offline mode.
@@ -1161,7 +1165,7 @@ if [[ "$TARGET_CODEX" == 1 ]]; then
   mkdir -p "$CODEX_HOME/agents" "$CODEX_HOME/themes"
   migrate_legacy_codex_roles
   status_value='status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-remaining", "five-hour-limit", "weekly-limit"]'
-  [[ "$STATUSLINE" == 1 ]] && status_value='# Native status line disabled; external Powerline wrapper is active.'
+  [[ "$CODEX_POWERLINE" == 1 ]] && status_value='# Native status line disabled; external Powerline wrapper is active.'
   [[ "$LSP" == 1 && "$BRIDGE_READY" == 1 ]] && lsp_enabled=true || lsp_enabled=false
   sed \
     -e "s|@EFFORT@|$EFFORT|" \
@@ -1264,7 +1268,7 @@ configure_hcom
 report_orquestrator
 
 printf 'statusline=%s\nlsp=%s\ncaveman=%s\nponytail=%s\n' \
-  "$([[ "$STATUSLINE" == 1 ]] && printf enabled || printf disabled)" \
+  "$([[ "$CODEX_POWERLINE" == 1 ]] && printf enabled || printf disabled)" \
   "$([[ "$LSP" == 1 ]] && printf enabled || printf disabled)" \
   "$([[ "$CAVEMAN_ALWAYS" == 1 ]] && printf wenyan-ultra || printf off)" \
   "$([[ "$PONYTAIL_ALWAYS" == 1 ]] && printf full || printf off)" >"$CONFIG_HOME/modes"
@@ -1280,10 +1284,14 @@ step "Shell integration"
 configure_shell
 
 if [[ "$STATUSLINE" == 1 && "$TARGET_CODEX" == 1 ]]; then
-  missing=()
-  for command in tmux jq sqlite3 git; do command -v "$command" >/dev/null || missing+=("$command"); done
-  if ((${#missing[@]})); then
-    warn "Statusline dependencies missing: ${missing[*]}. Install them, or rerun and disable the statusline."
+  if [[ "$CODEX_POWERLINE" != 1 ]]; then
+    warn "Codex Powerline needs tmux. Native Codex status line remains enabled; install tmux and rerun for Powerline."
+  else
+    missing=()
+    for command in jq sqlite3 git; do command -v "$command" >/dev/null || missing+=("$command"); done
+    if ((${#missing[@]})); then
+      warn "Codex Powerline installed with limited metrics; optional tools missing: ${missing[*]}."
+    fi
   fi
 fi
 

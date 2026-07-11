@@ -77,7 +77,7 @@ generate() {
   sql_cwd="${cwd//\'/\'\'}"
   codex_home="${CODEX_HOME:-$HOME/.codex}"
   row=""
-  if [[ -r "$codex_home/state_5.sqlite" ]]; then
+  if command -v sqlite3 >/dev/null 2>&1 && [[ -r "$codex_home/state_5.sqlite" ]]; then
     row="$(sqlite3 -separator $'\t' "$codex_home/state_5.sqlite" \
       "select rollout_path,coalesce(model,''),coalesce(reasoning_effort,''),tokens_used from threads where cwd='$sql_cwd' and archived=0 order by updated_at_ms desc,updated_at desc limit 1;" 2>/dev/null || true)"
   fi
@@ -86,7 +86,7 @@ generate() {
   effort="${effort:-xhigh}"
 
   metrics='{}'
-  if [[ -n "${rollout:-}" && -r "$rollout" ]]; then
+  if command -v jq >/dev/null 2>&1 && [[ -n "${rollout:-}" && -r "$rollout" ]]; then
     metrics="$(tail -n 1200 "$rollout" 2>/dev/null | jq -cs '
       map(select(.type == "event_msg" and .payload.type == "token_count"))
       | (last // {}) | .payload // {}
@@ -94,16 +94,19 @@ generate() {
   fi
 
   local input output cached current window ctx_pct primary weekly reset5 reset7
-  input="$(jq -r '.info.total_token_usage.input_tokens // 0' <<<"$metrics")"
-  output="$(jq -r '.info.total_token_usage.output_tokens // 0' <<<"$metrics")"
-  cached="$(jq -r '.info.total_token_usage.cached_input_tokens // 0' <<<"$metrics")"
-  current="$(jq -r '.info.last_token_usage.total_tokens // 0' <<<"$metrics")"
-  window="$(jq -r '.info.model_context_window // 0' <<<"$metrics")"
+  input=0 output=0 cached=0 current=0 window=0 primary=0 weekly=0 reset5=0 reset7=0
+  if command -v jq >/dev/null 2>&1; then
+    input="$(jq -r '.info.total_token_usage.input_tokens // 0' <<<"$metrics")"
+    output="$(jq -r '.info.total_token_usage.output_tokens // 0' <<<"$metrics")"
+    cached="$(jq -r '.info.total_token_usage.cached_input_tokens // 0' <<<"$metrics")"
+    current="$(jq -r '.info.last_token_usage.total_tokens // 0' <<<"$metrics")"
+    window="$(jq -r '.info.model_context_window // 0' <<<"$metrics")"
+    primary="$(jq -r '.rate_limits.primary.used_percent // 0 | floor' <<<"$metrics")"
+    weekly="$(jq -r '.rate_limits.secondary.used_percent // 0 | floor' <<<"$metrics")"
+    reset5="$(jq -r '.rate_limits.primary.resets_at // 0' <<<"$metrics")"
+    reset7="$(jq -r '.rate_limits.secondary.resets_at // 0' <<<"$metrics")"
+  fi
   ctx_pct="$(awk -v used="$current" -v total="$window" 'BEGIN { if (total > 0) printf "%d", used * 100 / total; else print 0 }')"
-  primary="$(jq -r '.rate_limits.primary.used_percent // 0 | floor' <<<"$metrics")"
-  weekly="$(jq -r '.rate_limits.secondary.used_percent // 0 | floor' <<<"$metrics")"
-  reset5="$(jq -r '.rate_limits.primary.resets_at // 0' <<<"$metrics")"
-  reset7="$(jq -r '.rate_limits.secondary.resets_at // 0' <<<"$metrics")"
   [[ "$reset5" != 0 ]] && reset5="$(epoch_time "$reset5" '%H:%M')" || reset5="--:--"
   [[ "$reset7" != 0 ]] && reset7="$(epoch_time "$reset7" '%a %H:%M')" || reset7="--- --:--"
   reset5="${reset5:---:--}"

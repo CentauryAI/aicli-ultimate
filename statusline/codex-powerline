@@ -21,9 +21,7 @@ fi
 
 statusline="$(sed -n 's/^statusline=//p' "$mode_file" 2>/dev/null | head -1)"
 status_ready=1
-for dependency in tmux jq sqlite3 git; do
-  command -v "$dependency" >/dev/null 2>&1 || status_ready=0
-done
+command -v tmux >/dev/null 2>&1 || status_ready=0
 
 case "${1:-}" in
   exec|review|resume|fork|archive|delete|unarchive|cloud|sandbox)
