@@ -1,0 +1,18 @@
+{
+  "name": "orquestrator",
+  "version": "0.1.0",
+  "description": "Token-light multi-agent orchestration through Kore.",
+  "author": {
+    "name": "CentauryAI"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Orquestrator",
+    "shortDescription": "Coordinate agents through Kore",
+    "longDescription": "Delegate, monitor, verify, and hand off work between AI coding agents through Kore without implementing in the coordinator thread.",
+    "developerName": "CentauryAI",
+    "category": "Productivity",
+    "capabilities": ["Instructions", "Multi-agent coordination"],
+    "defaultPrompt": "Use Orquestrator mode to coordinate this work through Kore."
+  }
+}

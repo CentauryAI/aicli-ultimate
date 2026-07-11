@@ -28,6 +28,7 @@ mkdir -p "$TMP/home/.claude" "$TMP/home/.config/opencode" "$TMP/home/.gemini/ant
 printf '{"custom":"preserved","statusLine":{"type":"command","command":"legacy-status"}}\n' \
   >"$TMP/home/.claude/settings.json"
 printf '{"plugin":["existing-plugin"]}\n' >"$TMP/home/.config/opencode/tui.json"
+printf '{"plugin":["existing-server-plugin"]}\n' >"$TMP/home/.config/opencode/opencode.json"
 printf '{"custom":"preserved","statusLine":{"command":"legacy-agy","enabled":true}}\n' \
   >"$TMP/home/.gemini/antigravity-cli/settings.json"
 
@@ -66,6 +67,8 @@ grep -q '"theme": "tokyonight"' "$TMP/home/.config/opencode/tui.json"
 grep -q '"existing-plugin"' "$TMP/home/.config/opencode/tui.json"
 jq -e '(.plugin | length) == 2 and (.plugin[1] | endswith("/aicli-ultimate/statusline.js"))' \
   "$TMP/home/.config/opencode/tui.json" >/dev/null
+jq -e '.plugin == ["existing-server-plugin", "@dietrichgebert/ponytail"]' \
+  "$TMP/home/.config/opencode/opencode.json" >/dev/null
 jq -e '.dependencies["@opentui/core"] == "*"' "$TMP/home/.config/opencode/package.json" >/dev/null
 jq -e '.custom == "preserved" and (.statusLine.command | endswith("/claude-ultimate-status"))' \
   "$TMP/home/.claude/settings.json" >/dev/null
@@ -75,6 +78,9 @@ grep -q '"name": "aicli-ultimate"' "$TMP/home/.gemini/config/plugins/aicli-ultim
 test -f "$TMP/home/.claude/skills/caveman/SKILL.md"
 test -f "$TMP/home/.agents/skills/ponytail/SKILL.md"
 test -f "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/centaury-branch-workflow/SKILL.md"
+test -f "$TMP/home/.claude/skills/orquestrator-hcom/SKILL.md"
+test -f "$TMP/home/.agents/skills/orquestrator-hcom/SKILL.md"
+test -f "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/orquestrator-hcom/SKILL.md"
 test -f "$TMP/home/.claude/agents/ultimate-reviewer.md"
 test -f "$TMP/home/.config/opencode/agents/ultimate-reviewer.md"
 test -f "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
@@ -143,7 +149,46 @@ jq -e '.custom == "preserved" and .statusLine.command == "legacy-status"' \
 jq -e '.custom == "preserved" and .statusLine.command == "legacy-agy"' \
   "$TMP/home/.gemini/antigravity-cli/settings.json" >/dev/null
 jq -e '.plugin == ["existing-plugin"]' "$TMP/home/.config/opencode/tui.json" >/dev/null
+jq -e '.plugin == ["existing-server-plugin"]' "$TMP/home/.config/opencode/opencode.json" >/dev/null
 test ! -e "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
 test ! -e "$TMP/home/.omp/agent/extensions/aicli-ultimate-statusline.ts"
+
+mkdir -p "$TMP/preserved-home/.config/opencode"
+printf '{"plugin":["@dietrichgebert/ponytail"]}\n' \
+  >"$TMP/preserved-home/.config/opencode/opencode.json"
+HOME="$TMP/preserved-home" \
+XDG_CONFIG_HOME="$TMP/preserved-home/.config" \
+CODEX_HOME="$TMP/preserved-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/preserved-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/preserved-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+AICLI_ULTIMATE_DRY_RUN=1 \
+AICLI_ULTIMATE_TARGETS=opencode \
+SHELL=/bin/bash \
+  "$ROOT/install.sh" >/dev/null
+HOME="$TMP/preserved-home" \
+XDG_CONFIG_HOME="$TMP/preserved-home/.config" \
+CODEX_HOME="$TMP/preserved-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/preserved-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/preserved-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+  "$TMP/preserved-home/.local/share/aicli-ultimate/uninstall.sh" >/dev/null
+jq -e '.plugin == ["@dietrichgebert/ponytail"]' \
+  "$TMP/preserved-home/.config/opencode/opencode.json" >/dev/null
+
+mkdir -p "$TMP/failure-bin" "$TMP/failure-home/.config/aicli-ultimate/native-plugins"
+printf '#!/bin/sh\nexit 1\n' >"$TMP/failure-bin/claude"
+chmod +x "$TMP/failure-bin/claude"
+touch "$TMP/failure-home/.config/aicli-ultimate/native-plugins/claude-installed-caveman"
+PATH="$TMP/failure-bin:/usr/bin:/bin" \
+HOME="$TMP/failure-home" \
+XDG_CONFIG_HOME="$TMP/failure-home/.config" \
+CODEX_HOME="$TMP/failure-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/failure-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/failure-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+  "$ROOT/uninstall.sh" >/dev/null 2>"$TMP/failure.err"
+test -f "$TMP/failure-home/.config/aicli-ultimate/native-plugins/claude-installed-caveman"
+grep -q 'ownership marker retained' "$TMP/failure.err"
 
 printf 'All tests passed.\n'

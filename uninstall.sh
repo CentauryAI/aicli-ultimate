@@ -70,6 +70,59 @@ remove_skill_set() {
   remove_skill_source "$target" "$INSTALL_DIR/plugins/caveman/skills"
   remove_skill_source "$target" "$INSTALL_DIR/plugins/ponytail/skills"
   remove_skill_source "$target" "$INSTALL_DIR/plugins/centaury-workflow/skills"
+  remove_skill_source "$target" "$INSTALL_DIR/plugins/orquestrator/skills"
+}
+
+remove_owned_integration() {
+  local marker="$1" description="$2"
+  shift 2
+  if "$@" >/dev/null 2>&1; then
+    rm -f "$marker"
+  else
+    printf 'Could not remove %s; ownership marker retained: %s\n' "$description" "$marker" >&2
+  fi
+}
+
+remove_native_plugins() {
+  local native="$CONFIG_HOME/native-plugins" marker tool
+  if command -v claude >/dev/null 2>&1; then
+    for tool in caveman ponytail; do
+      marker="$native/claude-installed-$tool"
+      if [[ -f "$marker" ]]; then
+        remove_owned_integration "$marker" "Claude plugin $tool" claude plugin uninstall "$tool@$tool"
+      else
+        marker="$native/claude-enabled-$tool"
+        if [[ -f "$marker" ]]; then
+          remove_owned_integration "$marker" "Claude plugin enablement $tool" claude plugin disable "$tool@$tool"
+        fi
+      fi
+      marker="$native/claude-marketplace-$tool"
+      if [[ -f "$marker" && ! -f "$native/claude-installed-$tool" ]]; then
+        remove_owned_integration "$marker" "Claude marketplace $tool" claude plugin marketplace remove "$tool"
+      fi
+    done
+  fi
+  marker="$native/omp-ponytail"
+  if [[ -f "$marker" ]] && command -v omp >/dev/null 2>&1; then
+    remove_owned_integration "$marker" "OMP plugin Ponytail" omp plugin uninstall @dietrichgebert/ponytail
+  fi
+  if command -v agy >/dev/null 2>&1; then
+    for tool in caveman ponytail; do
+      marker="$native/antigravity-$tool"
+      if [[ -f "$marker" ]]; then
+        remove_owned_integration "$marker" "Antigravity plugin $tool" agy plugin uninstall "$tool"
+      fi
+    done
+  fi
+  if command -v kore >/dev/null 2>&1; then
+    for tool in codex claude opencode antigravity; do
+      marker="$CONFIG_HOME/kore-hooks/$tool"
+      if [[ -f "$marker" ]]; then
+        remove_owned_integration "$marker" "Kore hook $tool" kore hooks remove "$tool"
+      fi
+    done
+  fi
+  rmdir "$native" "$CONFIG_HOME/kore-hooks" 2>/dev/null || true
 }
 
 remove_git_include() {
@@ -91,8 +144,10 @@ if command -v codex >/dev/null 2>&1; then
   codex plugin remove caveman@aicli-ultimate 2>/dev/null || true
   codex plugin remove ponytail@aicli-ultimate 2>/dev/null || true
   codex plugin remove centaury-workflow@aicli-ultimate 2>/dev/null || true
+  codex plugin remove orquestrator@aicli-ultimate 2>/dev/null || true
   codex plugin marketplace remove aicli-ultimate 2>/dev/null || true
 fi
+remove_native_plugins
 if command -v agy >/dev/null 2>&1; then
   agy plugin uninstall aicli-ultimate >/dev/null 2>&1 || true
 fi
@@ -109,6 +164,10 @@ if [[ -f "$INSTALL_DIR/scripts/json_remove.py" ]]; then
 fi
 
 if [[ -f "$INSTALL_DIR/scripts/json_array.py" ]]; then
+  if [[ -f "$CONFIG_HOME/opencode-ponytail-owned" ]]; then
+    python3 "$INSTALL_DIR/scripts/json_array.py" remove \
+      "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json" plugin '"@dietrichgebert/ponytail"'
+  fi
   opencode_plugin="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/aicli-ultimate/statusline.js"
   opencode_plugin_json="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$opencode_plugin")"
   python3 "$INSTALL_DIR/scripts/json_array.py" remove \
@@ -199,6 +258,7 @@ rm -f "$CONFIG_HOME/centaury.gitconfig" "$CONFIG_HOME/modes" "$CONFIG_HOME/tmux.
   "$CONFIG_HOME/tmux-opencode.conf" "$CONFIG_HOME/tmux-omp.conf" "$CONFIG_HOME/tmux-agy.conf" \
   "$CONFIG_HOME/claude-statusline-previous.json" "$CONFIG_HOME/profile-state.json" \
   "$CONFIG_HOME/antigravity-statusline-previous.json" "$CONFIG_HOME/omp-statusline-owned" \
+  "$CONFIG_HOME/opencode-ponytail-owned" \
   "$CONFIG_HOME/install-state.json"
 
 printf 'AI CLI Ultimate removed. Backups were preserved in %s/backups.\n' "$CONFIG_HOME"

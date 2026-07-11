@@ -161,6 +161,7 @@ copy_skill_set() {
   if [[ "$CAVEMAN" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/caveman/skills"; fi
   if [[ "$PONYTAIL" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/ponytail/skills"; fi
   if [[ "$CENTAURY" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/centaury-workflow/skills"; fi
+  if [[ "$ORQUESTRATOR" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/orquestrator/skills"; fi
 }
 
 backup_skill_source() {
@@ -176,6 +177,7 @@ backup_skill_set() {
   if [[ "$CAVEMAN" == 1 ]]; then backup_skill_source "$target" "$backup" "$ROOT/plugins/caveman/skills"; fi
   if [[ "$PONYTAIL" == 1 ]]; then backup_skill_source "$target" "$backup" "$ROOT/plugins/ponytail/skills"; fi
   if [[ "$CENTAURY" == 1 ]]; then backup_skill_source "$target" "$backup" "$ROOT/plugins/centaury-workflow/skills"; fi
+  if [[ "$ORQUESTRATOR" == 1 ]]; then backup_skill_source "$target" "$backup" "$ROOT/plugins/orquestrator/skills"; fi
 }
 
 configure_antigravity() {
@@ -293,6 +295,147 @@ install_plugin() {
   fi
 }
 
+claude_plugin_state() {
+  local plugin="$1" plugin_json
+  if ! plugin_json="$(claude plugin list --json 2>/dev/null)"; then
+    printf 'query-failed\n'
+    return 0
+  fi
+  python3 -c '
+import json, sys
+plugin = sys.argv[1]
+try:
+    item = next((item for item in json.load(sys.stdin) if item.get("id") == plugin), None)
+    print("absent" if item is None else ("enabled" if item.get("enabled") else "disabled"))
+except (ValueError, StopIteration):
+    print("query-failed")
+' "$plugin" <<<"$plugin_json"
+}
+
+install_claude_plugin() {
+  local source="$1" marketplace="$2" plugin="$3" state marker_dir="$CONFIG_HOME/native-plugins"
+  command -v claude >/dev/null 2>&1 || return 0
+  mkdir -p "$marker_dir"
+  state="$(claude_plugin_state "$plugin")"
+  if [[ "$state" == query-failed ]]; then
+    warn "Could not inspect Claude plugins; keeping existing state for $plugin."
+    return 0
+  elif [[ "$state" == absent ]]; then
+    if ! claude plugin marketplace list 2>/dev/null | grep -Eq "^[[:space:]]*❯[[:space:]]+$marketplace$"; then
+      claude plugin marketplace add "$source" || { warn "Could not add Claude marketplace: $source"; return; }
+      touch "$marker_dir/claude-marketplace-$marketplace"
+    fi
+    claude plugin install "$plugin" || { warn "Could not install Claude plugin: $plugin"; return; }
+    touch "$marker_dir/claude-installed-${plugin%@*}"
+  elif [[ "$state" == disabled ]]; then
+    claude plugin enable "$plugin" || { warn "Could not enable Claude plugin: $plugin"; return; }
+    touch "$marker_dir/claude-enabled-${plugin%@*}"
+  else
+    info "Claude plugin already enabled: $plugin"
+  fi
+}
+
+omp_plugin_installed() {
+  local plugin="$1"
+  omp plugin list --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    print(any(item.get("name") == sys.argv[1] for item in json.load(sys.stdin).get("npm", [])))
+except ValueError:
+    print(False)
+' "$plugin" | grep -qx True
+}
+
+antigravity_plugin_installed() {
+  local plugin="$1"
+  agy plugin list 2>/dev/null | python3 -c '
+import json, sys
+try:
+    print(any(item.get("name") == sys.argv[1] for item in json.load(sys.stdin).get("imports", [])))
+except ValueError:
+    print(False)
+' "$plugin" | grep -qx True
+}
+
+json_array_contains() {
+  local file="$1" key="$2" value_json="$3"
+  python3 -c '
+import json, pathlib, sys
+path, key, raw = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+try:
+    data = json.loads(path.read_text()) if path.exists() else {}
+    print(json.loads(raw) in data.get(key, []))
+except (OSError, ValueError, TypeError):
+    print(False)
+' "$file" "$key" "$value_json" | grep -qx True
+}
+
+install_native_mode_plugins() {
+  local marker_dir="$CONFIG_HOME/native-plugins"
+  [[ "$DRY_RUN" == 1 ]] && return 0
+  mkdir -p "$marker_dir"
+
+  if [[ "$TARGET_CLAUDE" == 1 ]]; then
+    [[ "$CAVEMAN" == 1 ]] && install_claude_plugin JuliusBrussee/caveman caveman caveman@caveman
+    [[ "$PONYTAIL" == 1 ]] && install_claude_plugin DietrichGebert/ponytail ponytail ponytail@ponytail
+  fi
+
+  if [[ "$TARGET_OMP" == 1 && "$PONYTAIL" == 1 ]] && command -v omp >/dev/null 2>&1 \
+    && ! omp_plugin_installed @dietrichgebert/ponytail; then
+    if omp plugin install @dietrichgebert/ponytail; then
+      touch "$marker_dir/omp-ponytail"
+    else
+      warn "Could not install Ponytail's native OMP plugin. Shared skills remain available."
+    fi
+  fi
+
+  if [[ "$TARGET_ANTIGRAVITY" == 1 ]] && command -v agy >/dev/null 2>&1; then
+    if [[ "$CAVEMAN" == 1 ]] && ! antigravity_plugin_installed caveman; then
+      agy plugin install https://github.com/JuliusBrussee/caveman \
+        && touch "$marker_dir/antigravity-caveman" \
+        || warn "Could not install Caveman's Antigravity plugin. Shared skills remain available."
+    fi
+    if [[ "$PONYTAIL" == 1 ]] && ! antigravity_plugin_installed ponytail; then
+      agy plugin install https://github.com/DietrichGebert/ponytail \
+        && touch "$marker_dir/antigravity-ponytail" \
+        || warn "Could not install Ponytail's Antigravity plugin. Shared skills remain available."
+    fi
+  fi
+}
+
+kore_hook_installed() {
+  local tool="$1"
+  kore hooks status 2>/dev/null | grep -Eq "^${tool}:[[:space:]]+installed([[:space:]]|$)"
+}
+
+configure_kore() {
+  local tool marker_dir="$CONFIG_HOME/kore-hooks"
+  local tools=()
+  [[ "$ORQUESTRATOR" == 1 && "$DRY_RUN" != 1 ]] || return 0
+  if ! command -v kore >/dev/null 2>&1; then
+    command -v curl >/dev/null || { warn "Kore requires curl; Orquestrator skill installed without runtime."; return; }
+    curl -fsSL https://github.com/Solar2004/kore/releases/latest/download/kore-installer.sh | sh \
+      || { warn "Could not install Kore; Orquestrator skill remains available."; return; }
+    export PATH="$BIN_DIR:$HOME/.local/bin:$PATH"
+  fi
+  command -v kore >/dev/null 2>&1 || { warn "Kore installer completed but kore is not on PATH."; return; }
+  mkdir -p "$marker_dir"
+  [[ "$TARGET_CODEX" == 1 ]] && tools+=(codex)
+  [[ "$TARGET_CLAUDE" == 1 ]] && tools+=(claude)
+  [[ "$TARGET_OPENCODE" == 1 ]] && tools+=(opencode)
+  [[ "$TARGET_ANTIGRAVITY" == 1 ]] && tools+=(antigravity)
+  for tool in "${tools[@]}"; do
+    kore_hook_installed "$tool" && continue
+    if kore hooks add "$tool"; then
+      touch "$marker_dir/$tool"
+    else
+      warn "Could not install Kore hook for $tool."
+    fi
+  done
+  [[ "$TARGET_OMP" == 1 ]] && info "OMP uses Kore through 'kore listen' because Kore has no native OMP hook."
+  return 0
+}
+
 resolve_source
 printf '\n\033[1;35mAI CLI Ultimate setup\033[0m\n\n'
 command -v python3 >/dev/null || die "python3 is required"
@@ -336,6 +479,7 @@ ask "Install the Caveman plugin?" y && CAVEMAN=1 || CAVEMAN=0
 if [[ "$CAVEMAN" == 1 ]] && ask "Keep Caveman active by default?" y; then CAVEMAN_ALWAYS=1; else CAVEMAN_ALWAYS=0; fi
 ask "Install the Ponytail plugin?" y && PONYTAIL=1 || PONYTAIL=0
 if [[ "$PONYTAIL" == 1 ]] && ask "Keep Ponytail active by default?" y; then PONYTAIL_ALWAYS=1; else PONYTAIL_ALWAYS=0; fi
+ask "Install Kore Orquestrator mode and messaging hooks?" y && ORQUESTRATOR=1 || ORQUESTRATOR=0
 if [[ "$TARGET_CODEX" == 1 ]]; then
   ask "Install the official Superpowers plugin?" y && SUPERPOWERS=1 || SUPERPOWERS=0
 else
@@ -359,6 +503,7 @@ for file in "$CODEX_HOME/config.toml" "$CODEX_HOME/aicli-ultimate.config.toml" "
   "$HOME/.claude/CLAUDE.md" "$HOME/.claude/settings.json" \
   "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/AGENTS.md" \
   "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/tui.json" \
+  "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json" \
   "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/package.json" "$HOME/AGENTS.md" \
   "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/config.yml" \
   "$HOME/.gemini/antigravity-cli/settings.json" \
@@ -449,6 +594,12 @@ if [[ "$TARGET_OPENCODE" == 1 ]]; then
     || warn "Keeping the existing OpenCode TUI schema."
   python3 "$ROOT/scripts/json_add.py" "$opencode_home/tui.json" theme '"tokyonight"' \
     || warn "Keeping the existing OpenCode theme."
+  if [[ "$PONYTAIL" == 1 ]]; then
+    if ! json_array_contains "$opencode_home/opencode.json" plugin '"@dietrichgebert/ponytail"'; then
+      python3 "$ROOT/scripts/json_array.py" add "$opencode_home/opencode.json" plugin '"@dietrichgebert/ponytail"'
+      touch "$CONFIG_HOME/opencode-ponytail-owned"
+    fi
+  fi
   [[ "$STATUSLINE" == 1 ]] && configure_opencode_statusline "$opencode_home"
 fi
 
@@ -469,6 +620,9 @@ fi
 if [[ "$CENTAURY" == 1 ]]; then
   configure_centaury_guard
 fi
+
+install_native_mode_plugins
+configure_kore
 
 printf 'statusline=%s\ncaveman=%s\nponytail=%s\n' \
   "$([[ "$STATUSLINE" == 1 ]] && printf enabled || printf disabled)" \
@@ -508,6 +662,7 @@ if [[ "$DRY_RUN" != 1 && "$TARGET_CODEX" == 1 ]]; then
   if [[ "$CAVEMAN" == 1 ]]; then install_plugin caveman@aicli-ultimate; fi
   if [[ "$PONYTAIL" == 1 ]]; then install_plugin ponytail@aicli-ultimate; fi
   if [[ "$CENTAURY" == 1 ]]; then install_plugin centaury-workflow@aicli-ultimate; fi
+  if [[ "$ORQUESTRATOR" == 1 ]]; then install_plugin orquestrator@aicli-ultimate; fi
   if [[ "$SUPERPOWERS" == 1 ]]; then install_plugin superpowers@openai-curated 0; fi
   if [[ "$SECURITY" == 1 ]]; then install_plugin codex-security@openai-curated 0; fi
 fi
