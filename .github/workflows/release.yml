@@ -1,0 +1,36 @@
+name: release
+
+# Push a semver tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`) to build a
+# bundle from the repo at that tag and publish it as a GitHub Release. install.sh
+# and resolve_source pull from `releases/latest/download/*`, so the released
+# bundle is exactly the repo contents at the tag.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build bundle from repo contents
+        run: |
+          mkdir -p pkg/aicli-ultimate
+          tar --exclude=.git --exclude=.github --exclude=./pkg -cf - . \
+            | tar -xf - -C pkg/aicli-ultimate
+          tar -czf aicli-ultimate.tar.gz -C pkg aicli-ultimate
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            install.sh uninstall.sh aicli-ultimate.tar.gz

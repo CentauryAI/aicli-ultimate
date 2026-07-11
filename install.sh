@@ -28,6 +28,32 @@ info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
+STEP_NUM=0
+STEP_TOTAL=8
+step() {
+  STEP_NUM=$((STEP_NUM + 1))
+  local width=24 filled
+  filled=$((STEP_NUM * width / STEP_TOTAL))
+  printf '\n\033[1;36m[%d/%d]\033[0m [%s%s] \033[1m%s\033[0m\n' \
+    "$STEP_NUM" "$STEP_TOTAL" \
+    "$(printf '%*s' "$filled" '' | tr ' ' '#')" \
+    "$(printf '%*s' "$((width - filled))" '')" \
+    "$*"
+}
+
+# skills(1) agent ids for the CLIs selected in this install (no exclude flag
+# exists, so we allow-list; this also keeps optional skills out of unrelated
+# agents and avoids the PromptScript "no global install" error).
+skills_agents() {
+  local a=()
+  [[ "$TARGET_CODEX" == 1 ]] && a+=(codex)
+  [[ "$TARGET_CLAUDE" == 1 ]] && a+=(claude-code)
+  [[ "$TARGET_OPENCODE" == 1 ]] && a+=(opencode)
+  [[ "$TARGET_OMP" == 1 ]] && a+=(pi)
+  [[ "$TARGET_ANTIGRAVITY" == 1 ]] && a+=(antigravity-cli)
+  printf '%s' "${a[*]}"
+}
+
 ask() {
   local prompt="$1" default="${2:-y}" answer
   if [[ "$NONINTERACTIVE" == 1 ]]; then
@@ -53,9 +79,18 @@ resolve_source() {
   command -v curl >/dev/null || die "curl is required"
   command -v tar >/dev/null || die "tar is required"
   TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/aicli-ultimate.XXXXXX")"
-  info "Downloading $REPO_SLUG@$REF" >&2
-  curl -fsSL "https://github.com/$REPO_SLUG/archive/refs/heads/$REF.tar.gz" \
-    | tar -xz -C "$TEMP_DIR" --strip-components=1
+  local release_url
+  if [[ "$REF" == main ]]; then
+    release_url="https://github.com/$REPO_SLUG/releases/latest/download/aicli-ultimate.tar.gz"
+  else
+    release_url="https://github.com/$REPO_SLUG/releases/download/$REF/aicli-ultimate.tar.gz"
+  fi
+  info "Downloading $REPO_SLUG ($REF)" >&2
+  if ! curl -fsSL "$release_url" | tar -xz -C "$TEMP_DIR" --strip-components=1; then
+    info "Release bundle unavailable; falling back to branch $REF" >&2
+    curl -fsSL "https://github.com/$REPO_SLUG/archive/refs/heads/$REF.tar.gz" \
+      | tar -xz -C "$TEMP_DIR" --strip-components=1
+  fi
   ROOT="$TEMP_DIR"
 }
 
@@ -136,6 +171,32 @@ configure_hcom() {
     else
       warn "Could not install HCOM hooks for $tool; use hcom start for ad-hoc mode."
     fi
+  done
+}
+
+report_orquestrator() {
+  [[ "$ORQUESTRATOR" == 1 && "$DRY_RUN" != 1 ]] || return 0
+  info "Orquestrator (HCOM) install check:"
+  local tool enabled skilldir hook skill
+  for tool in codex claude opencode omp antigravity; do
+    case "$tool" in
+      codex) enabled="$TARGET_CODEX"; skilldir="" ;;
+      claude) enabled="$TARGET_CLAUDE"; skilldir="$HOME/.claude/skills/orquestrator-hcom" ;;
+      opencode) enabled="$TARGET_OPENCODE"; skilldir="$HOME/.agents/skills/orquestrator-hcom" ;;
+      omp) enabled="$TARGET_OMP"; skilldir="$HOME/.agents/skills/orquestrator-hcom" ;;
+      antigravity) enabled="$TARGET_ANTIGRAVITY"
+        skilldir="$HOME/.gemini/config/plugins/aicli-ultimate/skills/orquestrator-hcom" ;;
+    esac
+    [[ "$enabled" == 1 ]] || continue
+    hcom_hook_installed "$tool" && hook="✓" || hook="✗"
+    if [[ -z "$skilldir" ]]; then
+      skill="native plugin"
+    elif [[ -d "$skilldir" ]]; then
+      skill="✓"
+    else
+      skill="✗"
+    fi
+    printf '  %-12s hook %s   skill %s\n' "$tool" "$hook" "$skill"
   done
 }
 
@@ -758,6 +819,9 @@ else
   SECURITY=0
 fi
 
+# The "Optional skills" step only runs when selected outside dry-run.
+[[ "$DRY_RUN" != 1 ]] && (( FRONTEND + PLAYWRIGHT + REACT > 0 )) || STEP_TOTAL=7
+
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup="$CONFIG_HOME/backups/$timestamp"
 mkdir -p "$backup"
@@ -803,7 +867,7 @@ backup_file "$BIN_DIR/aicli-opencode" "$backup"
 backup_file "$BIN_DIR/aicli-omp" "$backup"
 backup_file "$BIN_DIR/aicli-agy" "$backup"
 
-info "Installing files"
+step "Installing files"
 mkdir -p "$INSTALL_DIR" "$CONFIG_HOME" "$BIN_DIR"
 if [[ "$ROOT" != "$INSTALL_DIR" ]]; then
   (cd "$ROOT" && tar --exclude=.git -cf - .) | (cd "$INSTALL_DIR" && tar -xf -)
@@ -814,6 +878,7 @@ render_agents "$ROOT/config/AGENTS.md" "$CONFIG_HOME/global-instructions.md"
 if [[ "$LSP" == 1 && ( "$TARGET_CODEX" == 1 || "$TARGET_ANTIGRAVITY" == 1 ) ]]; then
   install_owned_file "$ROOT/config/mcpls.toml" "$CONFIG_HOME/mcpls.toml"
 fi
+step "Language servers"
 install_language_servers
 if [[ "$LSP" == 1 ]] && { [[ "$DRY_RUN" == 1 ]] \
   || { [[ -x "$MCPLS_BIN" && -f "$MCPLS_BIN.aicli-ultimate-owned" ]] \
@@ -836,6 +901,7 @@ if [[ "$GITHUB_LSP_READY" == 1 && "$DRY_RUN" != 1 ]]; then
   fi
 fi
 
+step "Configuring agents"
 if [[ "$TARGET_CODEX" == 1 ]]; then
   mkdir -p "$CODEX_HOME/agents" "$CODEX_HOME/themes"
   status_value='status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-remaining", "five-hour-limit", "weekly-limit"]'
@@ -935,8 +1001,11 @@ if [[ "$CENTAURY" == 1 ]]; then
   configure_centaury_guard
 fi
 
+step "Native mode plugins"
 install_native_mode_plugins
+step "Orquestrator (HCOM)"
 configure_hcom
+report_orquestrator
 
 printf 'statusline=%s\nlsp=%s\ncaveman=%s\nponytail=%s\n' \
   "$([[ "$STATUSLINE" == 1 ]] && printf enabled || printf disabled)" \
@@ -951,6 +1020,7 @@ if [[ "$TARGET_CODEX" == 1 ]]; then
   install_owned_file "$ROOT/statusline/codex-powerline-status" "$BIN_DIR/aicli-ultimate-status"
 fi
 
+step "Shell integration"
 configure_shell
 
 if [[ "$STATUSLINE" == 1 && "$TARGET_CODEX" == 1 ]]; then
@@ -987,12 +1057,24 @@ if [[ "$DRY_RUN" != 1 && "$TARGET_CODEX" == 1 ]]; then
   if [[ "$SECURITY" == 1 ]]; then install_plugin codex-security@openai-curated 0; fi
 fi
 
-if [[ "$DRY_RUN" != 1 ]]; then
-  if [[ "$FRONTEND" == 1 ]]; then npx skills add anthropics/skills@frontend-design -g -y; fi
-  if [[ "$PLAYWRIGHT" == 1 ]]; then npx skills add microsoft/playwright-cli@playwright-cli -g -y; fi
-  if [[ "$REACT" == 1 ]]; then npx skills add vercel-labs/agent-skills@vercel-react-best-practices -g -y; fi
+if [[ "$DRY_RUN" != 1 ]] && (( FRONTEND + PLAYWRIGHT + REACT > 0 )); then
+  step "Optional skills"
+  skills_agent_list="$(skills_agents)"
+  install_optional_skill() {
+    local ref="$1" name="$2"
+    # shellcheck disable=SC2086 -- $skills_agent_list is a controlled space-separated allow-list
+    if npx skills add "$ref" -g -y -a $skills_agent_list; then
+      info "Installed optional skill: $name"
+    else
+      warn "Could not install optional skill: $name"
+    fi
+  }
+  [[ "$FRONTEND" == 1 ]] && install_optional_skill anthropics/skills@frontend-design frontend-design
+  [[ "$PLAYWRIGHT" == 1 ]] && install_optional_skill microsoft/playwright-cli@playwright-cli playwright-cli
+  [[ "$REACT" == 1 ]] && install_optional_skill vercel-labs/agent-skills@vercel-react-best-practices vercel-react-best-practices
 fi
 
+step "Finalizing"
 cat >"$STATE_FILE" <<EOF
 {
   "version": 1,

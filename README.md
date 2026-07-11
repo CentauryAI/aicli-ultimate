@@ -8,6 +8,8 @@ Portable, interactive setup for Codex, Claude Code, OpenCode, OMP (Oh My Pi), an
 curl -fsSL https://raw.githubusercontent.com/CentauryAI/aicli-ultimate/main/install.sh | bash
 ```
 
+The installer pulls the latest published [release](https://github.com/CentauryAI/aicli-ultimate/releases) bundle when one exists and falls back to the `main` branch otherwise. Set `AICLI_ULTIMATE_REF=vX.Y.Z` to pin a specific release tag.
+
 The installer detects installed CLIs and asks which ones to configure. Safe defaults enable:
 
 - high-effort Codex configuration, memories, multi-agent support, goals, and plugins when Codex is selected;
