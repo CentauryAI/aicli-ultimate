@@ -107,6 +107,42 @@ remove_hcom_hooks() {
   rmdir "$marker_dir" 2>/dev/null || true
 }
 
+restore_hcom_codex_profile() {
+  local state="$CONFIG_HOME/hcom-codex-args.json" hcom_bin="" candidate current installed previous existed
+  [[ -f "$state" ]] || return 0
+  for candidate in "$(command -v hcom 2>/dev/null || true)" "$BIN_DIR/hcom" \
+    "$HOME/.local/bin/hcom" "$HOME/.cargo/bin/hcom"; do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then hcom_bin="$candidate"; break; fi
+  done
+  if [[ -z "$hcom_bin" ]]; then
+    printf 'Could not restore HCOM Codex args; state retained: %s\n' "$state" >&2
+    return 0
+  fi
+  if ! current="$("$hcom_bin" config --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    print(json.load(sys.stdin).get("HCOM_CODEX_ARGS", ""))
+except (ValueError, TypeError):
+    raise SystemExit(1)
+')"; then
+    printf 'Could not inspect HCOM codex_args; state retained: %s\n' "$state" >&2
+    return 0
+  fi
+  if ! installed="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["installed_value"])' "$state" 2>/dev/null)" \
+    || ! previous="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("value", ""))' "$state" 2>/dev/null)" \
+    || ! existed="$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1])).get("existed", False)).lower())' "$state" 2>/dev/null)"; then
+    printf 'Could not read HCOM codex_args state; state retained: %s\n' "$state" >&2
+    return 0
+  fi
+  if [[ "$current" != "$installed" ]]; then
+    printf 'Preserving HCOM codex_args changed after installation; state retained: %s\n' "$state" >&2
+  elif [[ "$existed" == true ]]; then
+    "$hcom_bin" config codex_args "$previous" >/dev/null && rm -f "$state"
+  else
+    "$hcom_bin" config codex_args "" >/dev/null && rm -f "$state"
+  fi
+}
+
 remove_native_plugins() {
   local native="$CONFIG_HOME/native-plugins" marker plugin tool
   if command -v claude >/dev/null 2>&1; then
@@ -203,6 +239,7 @@ if command -v codex >/dev/null 2>&1; then
       codex plugin marketplace remove aicli-ultimate
   fi
 fi
+restore_hcom_codex_profile
 remove_hcom_hooks
 remove_native_plugins
 if command -v agy >/dev/null 2>&1; then
