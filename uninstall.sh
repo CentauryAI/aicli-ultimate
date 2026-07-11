@@ -84,16 +84,24 @@ remove_owned_integration() {
 }
 
 remove_native_plugins() {
-  local native="$CONFIG_HOME/native-plugins" marker tool
+  local native="$CONFIG_HOME/native-plugins" marker plugin tool
   if command -v claude >/dev/null 2>&1; then
-    for tool in caveman ponytail; do
+    for tool in caveman ponytail rust-analyzer-lsp typescript-lsp pyright-lsp; do
       marker="$native/claude-installed-$tool"
       if [[ -f "$marker" ]]; then
-        remove_owned_integration "$marker" "Claude plugin $tool" claude plugin uninstall "$tool@$tool"
+        case "$tool" in
+          *-lsp) plugin="$tool@claude-plugins-official" ;;
+          *) plugin="$tool@$tool" ;;
+        esac
+        remove_owned_integration "$marker" "Claude plugin $tool" claude plugin uninstall "$plugin"
       else
         marker="$native/claude-enabled-$tool"
         if [[ -f "$marker" ]]; then
-          remove_owned_integration "$marker" "Claude plugin enablement $tool" claude plugin disable "$tool@$tool"
+          case "$tool" in
+            *-lsp) plugin="$tool@claude-plugins-official" ;;
+            *) plugin="$tool@$tool" ;;
+          esac
+          remove_owned_integration "$marker" "Claude plugin enablement $tool" claude plugin disable "$plugin"
         fi
       fi
       marker="$native/claude-marketplace-$tool"
@@ -101,6 +109,17 @@ remove_native_plugins() {
         remove_owned_integration "$marker" "Claude marketplace $tool" claude plugin marketplace remove "$tool"
       fi
     done
+    marker="$native/claude-marketplace-claude-plugins-official"
+    if [[ -f "$marker" \
+      && ! -f "$native/claude-installed-rust-analyzer-lsp" \
+      && ! -f "$native/claude-enabled-rust-analyzer-lsp" \
+      && ! -f "$native/claude-installed-typescript-lsp" \
+      && ! -f "$native/claude-enabled-typescript-lsp" \
+      && ! -f "$native/claude-installed-pyright-lsp" \
+      && ! -f "$native/claude-enabled-pyright-lsp" ]]; then
+      remove_owned_integration "$marker" "Claude official plugin marketplace" \
+        claude plugin marketplace remove claude-plugins-official
+    fi
   fi
   marker="$native/omp-ponytail"
   if [[ -f "$marker" ]] && command -v omp >/dev/null 2>&1; then
@@ -114,15 +133,7 @@ remove_native_plugins() {
       fi
     done
   fi
-  if command -v kore >/dev/null 2>&1; then
-    for tool in codex claude opencode antigravity; do
-      marker="$CONFIG_HOME/kore-hooks/$tool"
-      if [[ -f "$marker" ]]; then
-        remove_owned_integration "$marker" "Kore hook $tool" kore hooks remove "$tool"
-      fi
-    done
-  fi
-  rmdir "$native" "$CONFIG_HOME/kore-hooks" 2>/dev/null || true
+  rmdir "$native" 2>/dev/null || true
 }
 
 remove_git_include() {
@@ -161,6 +172,16 @@ remove_managed_block "$HOME/AGENTS.md"
 if [[ -f "$INSTALL_DIR/scripts/json_remove.py" ]]; then
   python3 "$INSTALL_DIR/scripts/json_remove.py" \
     "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/tui.json" theme '"tokyonight"'
+  if [[ -f "$CONFIG_HOME/opencode-lsp-owned" ]]; then
+    python3 "$INSTALL_DIR/scripts/json_remove.py" \
+      "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json" lsp true
+    rm -f "$CONFIG_HOME/opencode-lsp-owned"
+  fi
+  if [[ -f "$CONFIG_HOME/opencode-lsp-permission-owned" ]]; then
+    python3 "$INSTALL_DIR/scripts/json_remove.py" \
+      "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json" permission.lsp '"allow"'
+    rm -f "$CONFIG_HOME/opencode-lsp-permission-owned"
+  fi
 fi
 
 if [[ -f "$INSTALL_DIR/scripts/json_array.py" ]]; then
@@ -235,6 +256,8 @@ remove_generated_file "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/aicli-
 remove_generated_file "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/extensions/aicli-ultimate-statusline.ts" "$INSTALL_DIR/statusline/omp-powerline.ts"
 remove_generated_file "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/hooks/aicli-ultimate-statusline.ts" "$INSTALL_DIR/statusline/omp-powerline.ts"
 remove_generated_file "$BIN_DIR/antigravity-ultimate-status" "$INSTALL_DIR/statusline/antigravity-powerline"
+remove_generated_file "$BIN_DIR/aicli-mcpls" "$INSTALL_DIR/config/mcpls.toml"
+remove_generated_file "$CONFIG_HOME/mcpls.toml" "$INSTALL_DIR/config/mcpls.toml"
 
 backup=""
 if [[ -r "$CONFIG_HOME/install-state.json" ]]; then

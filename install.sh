@@ -10,6 +10,7 @@ CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
 INSTALL_DIR="${AICLI_ULTIMATE_INSTALL_DIR:-$HOME/.local/share/aicli-ultimate}"
 BIN_DIR="${AICLI_ULTIMATE_BIN_DIR:-$HOME/.local/bin}"
 STATE_FILE="$CONFIG_HOME/install-state.json"
+MCPLS_VERSION="0.3.7"
 TEMP_DIR=""
 
 cleanup() {
@@ -68,13 +69,111 @@ backup_file() {
 }
 
 render_agents() {
-  local source="$1" target="$2" caveman_rule="" ponytail_rule=""
+  local source="$1" target="$2" caveman_rule="" ponytail_rule="" lsp_rule=""
   [[ "$CAVEMAN_ALWAYS" == 1 ]] && caveman_rule='- Keep Caveman output mode active: terse output with full technical substance. Disable only when the user says “stop caveman”.'
   [[ "$PONYTAIL_ALWAYS" == 1 ]] && ponytail_rule='- Keep Ponytail engineering mode active: YAGNI, standard library first, native features before dependencies, and the smallest correct implementation.'
+  [[ "$LSP" == 1 ]] && lsp_rule='- Prefer native LSP tools for symbol navigation and focused diagnostics when available; fall back to rg and repository checks, and avoid dumping workspace-wide output.'
   sed \
     -e "s|@CAVEMAN_RULE@|$caveman_rule|" \
     -e "s|@PONYTAIL_RULE@|$ponytail_rule|" \
+    -e "s|@LSP_RULE@|$lsp_rule|" \
     "$source" >"$target"
+}
+
+install_language_servers() {
+  local packages=()
+  [[ "$LSP" == 1 && "$DRY_RUN" != 1 ]] || return 0
+
+  if ! command -v rust-analyzer >/dev/null 2>&1; then
+    if command -v rustup >/dev/null 2>&1; then
+      rustup component add rust-analyzer \
+        || warn "Could not install rust-analyzer with rustup."
+    else
+      warn "rust-analyzer is missing and rustup is unavailable."
+    fi
+  fi
+
+  if ! command -v typescript-language-server >/dev/null 2>&1 \
+    || ! command -v tsc >/dev/null 2>&1; then
+    packages+=(typescript-language-server typescript)
+  fi
+  command -v pyright-langserver >/dev/null 2>&1 || packages+=(pyright)
+
+  if ((${#packages[@]})); then
+    if command -v npm >/dev/null 2>&1; then
+      npm install -g "${packages[@]}" \
+        || warn "Could not install Node language servers: ${packages[*]}."
+    else
+      warn "npm is unavailable; missing Node language servers: ${packages[*]}."
+    fi
+  fi
+
+  if [[ "$TARGET_CODEX" == 1 || "$TARGET_ANTIGRAVITY" == 1 ]]; then
+    install_mcpls
+  fi
+}
+
+install_mcpls() {
+  local os arch target asset checksum bridge_tmp archive
+  if [[ -x "$MCPLS_BIN" && -f "$MCPLS_BIN.aicli-ultimate-owned" ]] \
+    && "$MCPLS_BIN" --version 2>/dev/null | grep -Eq "^mcpls ${MCPLS_VERSION}([[:space:]]|$)"; then
+    return 0
+  fi
+  command -v curl >/dev/null 2>&1 || { warn "mcpls requires curl; Codex/Antigravity LSP bridge was not installed."; return; }
+  command -v tar >/dev/null 2>&1 || { warn "mcpls requires tar; Codex/Antigravity LSP bridge was not installed."; return; }
+
+  os="$(uname -s)"
+  arch="$(uname -m)"
+  case "$os:$arch" in
+    Linux:x86_64|Linux:amd64)
+      target=x86_64-unknown-linux-gnu
+      checksum=40e88e46d9b6f812a146f6aa0304a8e6c47e98a7a767f53e249bff714814ed92
+      ;;
+    Linux:aarch64|Linux:arm64)
+      target=aarch64-unknown-linux-gnu
+      checksum=c2d235fc081defce7e934c96eef83142f3f26f16eca78e3a651c4b5775f843d1
+      ;;
+    Darwin:x86_64|Darwin:amd64)
+      target=x86_64-apple-darwin
+      checksum=763efe9005f758dc6c28f409c8b6ba7144808e40e2d907e4f7a36d5ad68d530e
+      ;;
+    Darwin:aarch64|Darwin:arm64)
+      target=aarch64-apple-darwin
+      checksum=b2e863acdf838d97ade7185a81b9bbdd03715160a668e5e6e27e694a6145b264
+      ;;
+    *) warn "mcpls has no supported binary for $os/$arch; Codex/Antigravity LSP bridge was not installed."; return ;;
+  esac
+
+  asset="mcpls-$target.tar.gz"
+  bridge_tmp="$(mktemp -d "${TMPDIR:-/tmp}/aicli-mcpls.XXXXXX")"
+  archive="$bridge_tmp/$asset"
+  if ! curl -fsSL "https://github.com/bug-ops/mcpls/releases/download/v$MCPLS_VERSION/$asset" -o "$archive"; then
+    rm -rf "$bridge_tmp"
+    warn "Could not download mcpls v$MCPLS_VERSION."
+    return
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$bridge_tmp" && printf '%s  %s\n' "$checksum" "$asset" | sha256sum -c - >/dev/null) \
+      || { rm -rf "$bridge_tmp"; warn "mcpls checksum verification failed."; return; }
+  elif command -v shasum >/dev/null 2>&1; then
+    (cd "$bridge_tmp" && printf '%s  %s\n' "$checksum" "$asset" | shasum -a 256 -c - >/dev/null) \
+      || { rm -rf "$bridge_tmp"; warn "mcpls checksum verification failed."; return; }
+  else
+    rm -rf "$bridge_tmp"
+    warn "No SHA-256 utility found; refusing to install mcpls without verification."
+    return
+  fi
+  if tar -xzf "$archive" -C "$bridge_tmp" && [[ -f "$bridge_tmp/mcpls" ]]; then
+    install_owned_file "$bridge_tmp/mcpls" "$MCPLS_BIN"
+    if [[ -f "$MCPLS_BIN.aicli-ultimate-owned" ]]; then
+      chmod +x "$MCPLS_BIN"
+    else
+      warn "Keeping existing unowned mcpls path without changing its permissions: $MCPLS_BIN"
+    fi
+  else
+    warn "Could not extract mcpls v$MCPLS_VERSION."
+  fi
+  rm -rf "$bridge_tmp"
 }
 
 configure_shell() {
@@ -94,6 +193,8 @@ configure_shell() {
   {
     printf '\n%s\n' "$marker_start"
     printf 'export PATH="$HOME/.local/bin:$PATH"\n'
+    [[ "$TARGET_OPENCODE" == 1 && "$LSP" == 1 ]] \
+      && printf 'export OPENCODE_EXPERIMENTAL_LSP_TOOL=true\n'
     [[ "$TARGET_CODEX" == 1 ]] && printf "alias codex='aicli-ultimate'\n"
     if [[ "$COMPLETIONS" == 1 ]]; then
       if [[ "$TARGET_CODEX" == 1 && "${SHELL##*/}" == zsh ]]; then
@@ -181,22 +282,49 @@ backup_skill_set() {
 }
 
 configure_antigravity() {
-  local target="$HOME/.gemini/config/plugins/aicli-ultimate"
+  local target="$HOME/.gemini/config/plugins/aicli-ultimate" stage_root stage previous
   if [[ -e "$target" && ! -e "$target/.aicli-ultimate-owned" ]]; then
     warn "Keeping existing Antigravity plugin: $target"
     return 0
   fi
-  mkdir -p "$target/rules"
-  touch "$target/.aicli-ultimate-owned"
-  cp "$ROOT/adapters/antigravity/plugin.json" "$target/plugin.json"
-  cp "$CONFIG_HOME/global-instructions.md" "$target/rules/global.md"
-  copy_skill_set "$target/skills"
-  if command -v agy >/dev/null 2>&1 && ! agy plugin validate "$target" >/dev/null; then
-    warn "Antigravity rejected the generated plugin; files remain at $target for inspection."
-  elif [[ "$DRY_RUN" != 1 ]] && command -v agy >/dev/null 2>&1 \
-    && ! agy plugin install "$target" >/dev/null; then
-    warn "Antigravity validated the plugin but could not register it."
+  mkdir -p "$(dirname "$target")"
+  stage_root="$(mktemp -d "${TMPDIR:-/tmp}/aicli-antigravity.XXXXXX")"
+  stage="$stage_root/aicli-ultimate"
+  mkdir -p "$stage/rules"
+  touch "$stage/.aicli-ultimate-owned"
+  cp "$ROOT/adapters/antigravity/plugin.json" "$stage/plugin.json"
+  if [[ "$LSP" == 1 && "$BRIDGE_READY" == 1 ]]; then
+    sed \
+      -e "s|@MCPLS_BIN@|$MCPLS_BIN|g" \
+      -e "s|@MCPLS_CONFIG@|$CONFIG_HOME/mcpls.toml|g" \
+      "$ROOT/adapters/antigravity/mcp_config.json" >"$stage/mcp_config.json"
   fi
+  cp "$CONFIG_HOME/global-instructions.md" "$stage/rules/global.md"
+  copy_skill_set "$stage/skills"
+
+  if [[ "$DRY_RUN" != 1 ]] && command -v agy >/dev/null 2>&1; then
+    if ! agy plugin validate "$stage" >/dev/null; then
+      rm -rf "$stage_root"
+      warn "Antigravity rejected the generated plugin; keeping the previous installation."
+      return 0
+    fi
+    previous="$stage_root/previous"
+    [[ -e "$target" ]] && mv "$target" "$previous"
+    if ! agy plugin install "$stage" >/dev/null; then
+      rm -rf "$target"
+      if [[ -e "$previous" ]]; then
+        mv "$previous" "$target"
+        warn "Antigravity could not register the generated plugin; restored the previous installation."
+      else
+        cp -R "$stage" "$target"
+        warn "Antigravity could not register the generated plugin; copied it for inspection."
+      fi
+    fi
+  else
+    rm -rf "$target"
+    cp -R "$stage" "$target"
+  fi
+  rm -rf "$stage_root"
 }
 
 configure_opencode_statusline() {
@@ -378,6 +506,11 @@ install_native_mode_plugins() {
   if [[ "$TARGET_CLAUDE" == 1 ]]; then
     [[ "$CAVEMAN" == 1 ]] && install_claude_plugin JuliusBrussee/caveman caveman caveman@caveman
     [[ "$PONYTAIL" == 1 ]] && install_claude_plugin DietrichGebert/ponytail ponytail ponytail@ponytail
+    if [[ "$LSP" == 1 ]]; then
+      install_claude_plugin anthropics/claude-plugins-official claude-plugins-official rust-analyzer-lsp@claude-plugins-official
+      install_claude_plugin anthropics/claude-plugins-official claude-plugins-official typescript-lsp@claude-plugins-official
+      install_claude_plugin anthropics/claude-plugins-official claude-plugins-official pyright-lsp@claude-plugins-official
+    fi
   fi
 
   if [[ "$TARGET_OMP" == 1 && "$PONYTAIL" == 1 ]] && command -v omp >/dev/null 2>&1 \
@@ -401,39 +534,6 @@ install_native_mode_plugins() {
         || warn "Could not install Ponytail's Antigravity plugin. Shared skills remain available."
     fi
   fi
-}
-
-kore_hook_installed() {
-  local tool="$1"
-  kore hooks status 2>/dev/null | grep -Eq "^${tool}:[[:space:]]+installed([[:space:]]|$)"
-}
-
-configure_kore() {
-  local tool marker_dir="$CONFIG_HOME/kore-hooks"
-  local tools=()
-  [[ "$ORQUESTRATOR" == 1 && "$DRY_RUN" != 1 ]] || return 0
-  if ! command -v kore >/dev/null 2>&1; then
-    command -v curl >/dev/null || { warn "Kore requires curl; Orquestrator skill installed without runtime."; return; }
-    curl -fsSL https://github.com/Solar2004/kore/releases/latest/download/kore-installer.sh | sh \
-      || { warn "Could not install Kore; Orquestrator skill remains available."; return; }
-    export PATH="$BIN_DIR:$HOME/.local/bin:$PATH"
-  fi
-  command -v kore >/dev/null 2>&1 || { warn "Kore installer completed but kore is not on PATH."; return; }
-  mkdir -p "$marker_dir"
-  [[ "$TARGET_CODEX" == 1 ]] && tools+=(codex)
-  [[ "$TARGET_CLAUDE" == 1 ]] && tools+=(claude)
-  [[ "$TARGET_OPENCODE" == 1 ]] && tools+=(opencode)
-  [[ "$TARGET_ANTIGRAVITY" == 1 ]] && tools+=(antigravity)
-  for tool in "${tools[@]}"; do
-    kore_hook_installed "$tool" && continue
-    if kore hooks add "$tool"; then
-      touch "$marker_dir/$tool"
-    else
-      warn "Could not install Kore hook for $tool."
-    fi
-  done
-  [[ "$TARGET_OMP" == 1 ]] && info "OMP uses Kore through 'kore listen' because Kore has no native OMP hook."
-  return 0
 }
 
 resolve_source
@@ -475,11 +575,18 @@ if (( TARGET_CODEX + TARGET_CLAUDE + TARGET_OPENCODE + TARGET_OMP + TARGET_ANTIG
 else
   STATUSLINE=0
 fi
+if [[ -n "${AICLI_ULTIMATE_LSP:-}" ]]; then
+  [[ "$AICLI_ULTIMATE_LSP" =~ ^[01]$ ]] || die "AICLI_ULTIMATE_LSP must be 0 or 1"
+  LSP="$AICLI_ULTIMATE_LSP"
+else
+  ask "Install essential LSP support (Rust, TypeScript/JavaScript, and Python)?" y && LSP=1 || LSP=0
+fi
+MCPLS_BIN="$BIN_DIR/aicli-mcpls"
 ask "Install the Caveman plugin?" y && CAVEMAN=1 || CAVEMAN=0
 if [[ "$CAVEMAN" == 1 ]] && ask "Keep Caveman active by default?" y; then CAVEMAN_ALWAYS=1; else CAVEMAN_ALWAYS=0; fi
 ask "Install the Ponytail plugin?" y && PONYTAIL=1 || PONYTAIL=0
 if [[ "$PONYTAIL" == 1 ]] && ask "Keep Ponytail active by default?" y; then PONYTAIL_ALWAYS=1; else PONYTAIL_ALWAYS=0; fi
-ask "Install Kore Orquestrator mode and messaging hooks?" y && ORQUESTRATOR=1 || ORQUESTRATOR=0
+ask "Install HCOM Orquestrator mode?" y && ORQUESTRATOR=1 || ORQUESTRATOR=0
 if [[ "$TARGET_CODEX" == 1 ]]; then
   ask "Install the official Superpowers plugin?" y && SUPERPOWERS=1 || SUPERPOWERS=0
 else
@@ -548,13 +655,29 @@ fi
 
 render_agents "$ROOT/config/AGENTS.md" "$CONFIG_HOME/global-instructions.md"
 
+if [[ "$LSP" == 1 && ( "$TARGET_CODEX" == 1 || "$TARGET_ANTIGRAVITY" == 1 ) ]]; then
+  install_owned_file "$ROOT/config/mcpls.toml" "$CONFIG_HOME/mcpls.toml"
+fi
+install_language_servers
+if [[ "$LSP" == 1 ]] && { [[ "$DRY_RUN" == 1 ]] \
+  || { [[ -x "$MCPLS_BIN" && -f "$MCPLS_BIN.aicli-ultimate-owned" ]] \
+    && "$MCPLS_BIN" --version 2>/dev/null | grep -Eq "^mcpls ${MCPLS_VERSION}([[:space:]]|$)"; }; }; then
+  BRIDGE_READY=1
+else
+  BRIDGE_READY=0
+fi
+
 if [[ "$TARGET_CODEX" == 1 ]]; then
   mkdir -p "$CODEX_HOME/agents" "$CODEX_HOME/themes"
   status_value='status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-remaining", "five-hour-limit", "weekly-limit"]'
   [[ "$STATUSLINE" == 1 ]] && status_value='# Native status line disabled; external Powerline wrapper is active.'
+  [[ "$LSP" == 1 && "$BRIDGE_READY" == 1 ]] && lsp_enabled=true || lsp_enabled=false
   sed \
     -e "s|@EFFORT@|$EFFORT|" \
     -e "s|@CODEX_HOME@|$CODEX_HOME|g" \
+    -e "s|@MCPLS_BIN@|$MCPLS_BIN|g" \
+    -e "s|@MCPLS_CONFIG@|$CONFIG_HOME/mcpls.toml|g" \
+    -e "s|@LSP_ENABLED@|$lsp_enabled|g" \
     -e "s|@STATUS_LINE_CONFIG@|$status_value|" \
     "$ROOT/config/ultimate.config.toml" >"$CONFIG_HOME/aicli-ultimate.config.toml.rendered"
   install_owned_file "$CONFIG_HOME/aicli-ultimate.config.toml.rendered" "$CODEX_HOME/aicli-ultimate.config.toml"
@@ -594,6 +717,14 @@ if [[ "$TARGET_OPENCODE" == 1 ]]; then
     || warn "Keeping the existing OpenCode TUI schema."
   python3 "$ROOT/scripts/json_add.py" "$opencode_home/tui.json" theme '"tokyonight"' \
     || warn "Keeping the existing OpenCode theme."
+  if [[ "$LSP" == 1 ]]; then
+    python3 "$ROOT/scripts/json_add.py" "$opencode_home/opencode.json" lsp true \
+      "$CONFIG_HOME/opencode-lsp-owned" \
+      || warn "Keeping the existing OpenCode LSP configuration."
+    python3 "$ROOT/scripts/json_add.py" "$opencode_home/opencode.json" permission.lsp '"allow"' \
+      "$CONFIG_HOME/opencode-lsp-permission-owned" \
+      || warn "Keeping the existing OpenCode LSP permission."
+  fi
   if [[ "$PONYTAIL" == 1 ]]; then
     if ! json_array_contains "$opencode_home/opencode.json" plugin '"@dietrichgebert/ponytail"'; then
       python3 "$ROOT/scripts/json_array.py" add "$opencode_home/opencode.json" plugin '"@dietrichgebert/ponytail"'
@@ -622,10 +753,10 @@ if [[ "$CENTAURY" == 1 ]]; then
 fi
 
 install_native_mode_plugins
-configure_kore
 
-printf 'statusline=%s\ncaveman=%s\nponytail=%s\n' \
+printf 'statusline=%s\nlsp=%s\ncaveman=%s\nponytail=%s\n' \
   "$([[ "$STATUSLINE" == 1 ]] && printf enabled || printf disabled)" \
+  "$([[ "$LSP" == 1 ]] && printf enabled || printf disabled)" \
   "$([[ "$CAVEMAN_ALWAYS" == 1 ]] && printf wenyan-ultra || printf off)" \
   "$([[ "$PONYTAIL_ALWAYS" == 1 ]] && printf full || printf off)" >"$CONFIG_HOME/modes"
 

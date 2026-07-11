@@ -1,0 +1,32 @@
+[workspace]
+roots = []
+
+[[language_extensions]]
+extensions = ["rs"]
+language_id = "rust"
+
+[[language_extensions]]
+extensions = ["ts", "tsx", "js", "jsx", "mts", "cts", "mjs", "cjs"]
+language_id = "typescript"
+
+[[language_extensions]]
+extensions = ["py", "pyi"]
+language_id = "python"
+
+[[lsp_servers]]
+language_id = "rust"
+command = "rust-analyzer"
+args = []
+file_patterns = ["**/*.rs"]
+
+[[lsp_servers]]
+language_id = "typescript"
+command = "typescript-language-server"
+args = ["--stdio"]
+file_patterns = ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mts", "**/*.cts", "**/*.mjs", "**/*.cjs"]
+
+[[lsp_servers]]
+language_id = "python"
+command = "pyright-langserver"
+args = ["--stdio"]
+file_patterns = ["**/*.py", "**/*.pyi"]

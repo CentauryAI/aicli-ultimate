@@ -14,6 +14,7 @@
 - Delegate independent exploration, implementation, or review when it materially saves time or context, then verify the result.
 @CAVEMAN_RULE@
 @PONYTAIL_RULE@
+@LSP_RULE@
 
 ## Engineering defaults
 

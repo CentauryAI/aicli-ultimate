@@ -23,6 +23,12 @@ config_file = "@CODEX_HOME@/agents/ultimate-researcher.toml"
 description = "Reviews diffs for real bugs, concrete failure scenarios, and needless complexity; read-only unless explicitly asked to edit."
 config_file = "@CODEX_HOME@/agents/ultimate-reviewer.toml"
 
+[mcp_servers.aicli_lsp]
+command = "@MCPLS_BIN@"
+args = ["--config", "@MCPLS_CONFIG@"]
+enabled = @LSP_ENABLED@
+enabled_tools = ["get_hover", "get_definition", "get_references", "workspace_symbol_search", "get_diagnostics", "go_to_implementation"]
+
 [tui]
 theme = "midnight-blue"
 @STATUS_LINE_CONFIG@

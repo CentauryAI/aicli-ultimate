@@ -17,14 +17,20 @@ def main() -> None:
     data = json.loads(path.read_text())
     keys = sys.argv[2].split(".")
     parent = data
+    parents = []
     for key in keys[:-1]:
         if not isinstance(parent, dict) or key not in parent:
             return
+        parents.append((parent, key))
         parent = parent[key]
     key = keys[-1]
     expected = json.loads(sys.argv[3])
     if isinstance(parent, dict) and parent.get(key) == expected:
         del parent[key]
+        for ancestor, child_key in reversed(parents):
+            if ancestor.get(child_key) != {}:
+                break
+            del ancestor[child_key]
         path.write_text(json.dumps(data, indent=2) + "\n")
 
 
