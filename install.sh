@@ -13,10 +13,6 @@ BIN_DIR="${AICLI_ULTIMATE_BIN_DIR:-$HOME/.local/bin}"
 STATE_FILE="$CONFIG_HOME/install-state.json"
 MCPLS_VERSION="0.3.7"
 GITHUB_LSP_VERSION="24.03.10"
-HCOM_VERSION="0.7.23"
-HCOM_INSTALLER_SHA256="5834dee99af05a039a259a81c43335913ec68920c627ead4cae638c652f649b2"
-HCOM_INSTALLER_URL="https://github.com/aannoo/hcom/releases/download/v$HCOM_VERSION/hcom-installer.sh"
-HCOM_BIN=""
 TEMP_DIR=""
 
 cleanup() {
@@ -30,7 +26,7 @@ warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 STEP_NUM=0
-STEP_TOTAL=8
+STEP_TOTAL=7
 step() {
   STEP_NUM=$((STEP_NUM + 1))
   local width=24 filled
@@ -235,181 +231,6 @@ install_codex_if_missing() {
   ask "Codex CLI is missing. Install @openai/codex with npm?" y || die "Codex CLI is required"
   command -v npm >/dev/null || die "npm is required to install Codex automatically"
   [[ "$OFFLINE" == 1 ]] || npm install -g @openai/codex
-}
-
-install_hcom_if_missing() {
-  local installer candidate
-  if command -v hcom >/dev/null 2>&1; then
-    HCOM_BIN="$(command -v hcom)"
-    return 0
-  fi
-  [[ "$OFFLINE" != 1 ]] || return 0
-  command -v curl >/dev/null 2>&1 || die "curl is required to install hcom"
-  installer="$(mktemp "${TMPDIR:-/tmp}/hcom-installer.XXXXXX")"
-  if ! curl -fsSL "$HCOM_INSTALLER_URL" -o "$installer"; then
-    rm -f "$installer"
-    die "failed to download the official hcom installer"
-  fi
-  if command -v sha256sum >/dev/null 2>&1; then
-    printf '%s  %s\n' "$HCOM_INSTALLER_SHA256" "$installer" | sha256sum -c - >/dev/null \
-      || { rm -f "$installer"; die "hcom installer checksum verification failed"; }
-  elif command -v shasum >/dev/null 2>&1; then
-    printf '%s  %s\n' "$HCOM_INSTALLER_SHA256" "$installer" | shasum -a 256 -c - >/dev/null \
-      || { rm -f "$installer"; die "hcom installer checksum verification failed"; }
-  else
-    rm -f "$installer"
-    die "no SHA-256 utility found; refusing to run the hcom installer"
-  fi
-  if ! sh "$installer"; then
-    rm -f "$installer"
-    die "failed to install hcom"
-  fi
-  rm -f "$installer"
-  for candidate in "$BIN_DIR/hcom" "$HOME/.local/bin/hcom" "$HOME/.cargo/bin/hcom"; do
-    if [[ -x "$candidate" ]]; then
-      HCOM_BIN="$candidate"
-      return 0
-    fi
-  done
-  command -v hcom >/dev/null 2>&1 && HCOM_BIN="$(command -v hcom)"
-  [[ -n "$HCOM_BIN" ]] || die "hcom installed, but its binary was not found"
-}
-
-hcom_hook_installed() {
-  local tool="$1"
-  "$HCOM_BIN" status --json 2>/dev/null | python3 -c '
-import json, sys
-try:
-    print(bool(json.load(sys.stdin).get("tools", {}).get(sys.argv[1], {}).get("hooks")))
-except (OSError, ValueError, TypeError):
-    print(False)
-' "$tool" | grep -qx True
-}
-
-hcom_codex_args() {
-  "$HCOM_BIN" config --json 2>/dev/null | python3 -c '
-import json, sys
-try:
-    print(json.load(sys.stdin).get("HCOM_CODEX_ARGS", ""))
-except (ValueError, TypeError):
-    raise SystemExit(1)
-'
-}
-
-configure_hcom_codex_profile() {
-  local state="$CONFIG_HOME/hcom-codex-args.json" current installed profile_state
-  [[ "$TARGET_CODEX" == 1 ]] || return 0
-  if ! current="$(hcom_codex_args)"; then
-    warn "Could not inspect HCOM codex_args; keeping them unchanged."
-    return 0
-  fi
-  if [[ -f "$state" ]]; then
-    if ! installed="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["installed_value"])' "$state" 2>/dev/null)"; then
-      warn "Could not read saved HCOM codex_args state; keeping current args."
-      return 0
-    fi
-    if [[ "$current" == "$installed" ]]; then
-      info "HCOM Codex profile args already configured."
-    else
-      warn "Keeping HCOM codex_args changed after AI CLI Ultimate configured them."
-    fi
-    return 0
-  fi
-  profile_state="$(python3 - "$current" <<'PY'
-import shlex, sys
-try:
-    args = shlex.split(sys.argv[1])
-except ValueError:
-    print("invalid")
-    raise SystemExit
-for index, arg in enumerate(args):
-    if arg == "--profile" or arg == "-p":
-        value = args[index + 1] if index + 1 < len(args) else ""
-        print("aicli" if value == "aicli-ultimate" else "other")
-        break
-    if arg.startswith("--profile="):
-        print("aicli" if arg.split("=", 1)[1] == "aicli-ultimate" else "other")
-        break
-else:
-    print("none")
-PY
-)"
-  case "$profile_state" in
-    aicli) info "HCOM Codex profile args already configured."; return 0 ;;
-    other) warn "Keeping the existing HCOM Codex profile in codex_args."; return 0 ;;
-    invalid) warn "Could not parse existing HCOM codex_args; keeping them unchanged."; return 0 ;;
-  esac
-  installed="${current:+$current }--profile aicli-ultimate"
-  if "$HCOM_BIN" config codex_args "$installed"; then
-    mkdir -p "$(dirname "$state")"
-    python3 - "$state" "$current" "$installed" <<'PY'
-import json, pathlib, sys
-pathlib.Path(sys.argv[1]).write_text(json.dumps({
-    "existed": bool(sys.argv[2]),
-    "value": sys.argv[2],
-    "installed_value": sys.argv[3],
-}) + "\n")
-PY
-  else
-    warn "Could not configure HCOM Codex profile args."
-  fi
-}
-
-configure_hcom() {
-  local tool enabled marker_dir="$CONFIG_HOME/hcom-hooks"
-  [[ "$ORQUESTRATOR" == 1 && "$OFFLINE" != 1 ]] || return 0
-  install_hcom_if_missing
-  mkdir -p "$marker_dir"
-  for tool in codex claude opencode omp antigravity; do
-    case "$tool" in
-      codex) enabled="$TARGET_CODEX" ;;
-      claude) enabled="$TARGET_CLAUDE" ;;
-      opencode) enabled="$TARGET_OPENCODE" ;;
-      omp) enabled="$TARGET_OMP" ;;
-      antigravity) enabled="$TARGET_ANTIGRAVITY" ;;
-    esac
-    [[ "$enabled" == 1 ]] || continue
-    if hcom_hook_installed "$tool"; then
-      info "HCOM hooks already installed: $tool"
-    elif "$HCOM_BIN" hooks add "$tool"; then
-      touch "$marker_dir/$tool"
-    else
-      warn "Could not install HCOM hooks for $tool; use hcom start for ad-hoc mode."
-    fi
-  done
-  configure_hcom_codex_profile
-}
-
-report_orquestrator() {
-  [[ "$ORQUESTRATOR" == 1 && "$OFFLINE" != 1 ]] || return 0
-  info "Orquestrator (HCOM) install check:"
-  local tool enabled skilldir hook skill
-  for tool in codex claude opencode omp antigravity; do
-    case "$tool" in
-      codex)
-        enabled="$TARGET_CODEX"
-        [[ "$CODEX_SHARED_SKILLS" == 1 ]] \
-          && skilldir="$HOME/.agents/skills/orquestrator-hcom" \
-          || skilldir="native"
-        ;;
-      claude) enabled="$TARGET_CLAUDE"; skilldir="$HOME/.claude/skills/orquestrator-hcom" ;;
-      opencode) enabled="$TARGET_OPENCODE"; skilldir="$HOME/.agents/skills/orquestrator-hcom" ;;
-      omp) enabled="$TARGET_OMP"; skilldir="$HOME/.agents/skills/orquestrator-hcom" ;;
-      antigravity) enabled="$TARGET_ANTIGRAVITY"
-        skilldir="$HOME/.gemini/config/plugins/aicli-ultimate/skills/orquestrator-hcom" ;;
-    esac
-    [[ "$enabled" == 1 ]] || continue
-    hcom_hook_installed "$tool" && hook="✓" || hook="✗"
-    if [[ "$skilldir" == native ]]; then
-      codex plugin list 2>/dev/null | grep -Eq '^orquestrator@aicli-ultimate[[:space:]]+installed' \
-        && skill="✓ native plugin" || skill="✗ native plugin"
-    elif [[ -d "$skilldir" ]]; then
-      skill="✓"
-    else
-      skill="✗"
-    fi
-    printf '  %-12s hook %s   skill %s\n' "$tool" "$hook" "$skill"
-  done
 }
 
 backup_file() {
@@ -1175,7 +996,7 @@ fi
 
 OPTIONAL_SKILLS=$((FRONTEND + PLAYWRIGHT + REACT + WEBAPP + MCPBUILDER + GRILLDOCS + SECBP + DIFFREVIEW + GHFIXCI))
 # The "Optional skills" step only runs when selected outside offline mode.
-[[ "$OFFLINE" != 1 ]] && (( OPTIONAL_SKILLS > 0 )) || STEP_TOTAL=7
+[[ "$OFFLINE" != 1 ]] && (( OPTIONAL_SKILLS > 0 )) || STEP_TOTAL=6
 
 if [[ "$DRY_RUN" == 1 ]]; then
   info "Dry run: no files or configuration will be changed."
@@ -1379,8 +1200,6 @@ fi
 
 step "Native mode plugins"
 install_native_mode_plugins
-step "Orquestrator (HCOM)"
-configure_hcom
 
 printf 'statusline=%s\nlsp=%s\ncaveman=%s\nponytail=%s\ncodex_skills=%s\n' \
   "$([[ "$CODEX_POWERLINE" == 1 ]] && printf enabled || printf disabled)" \
@@ -1480,8 +1299,6 @@ if [[ "$OFFLINE" != 1 ]] && (( OPTIONAL_SKILLS > 0 )); then
   [[ "$GHFIXCI" == 1 ]] && install_optional_skill openai/skills@gh-fix-ci gh-fix-ci
 fi
 
-report_orquestrator
-
 step "Finalizing"
 prune_orphans
 cat >"$STATE_FILE" <<EOF
@@ -1503,8 +1320,5 @@ if [[ "$TARGET_CODEX" == 1 ]]; then
   printf 'Codex diagnostics: aicli-ultimate --doctor\n'
   [[ "$ORQUESTRATOR" == 1 ]] \
     && printf 'Codex Orquestrator: use `$orquestrator-hcom` or natural language; `/orchestration` is not a Codex command.\n'
-  if [[ "$ORQUESTRATOR" == 1 ]]; then
-    printf 'HCOM Codex: profile args configured when no user profile exists. HCOM 0.7.23 has no executable override, so `hcom codex` cannot use external Powerline; launch `codex`/`aicli-ultimate` for Powerline.\n'
-  fi
 fi
 [[ "$CENTAURY" == 1 ]] && printf 'CentauryAI repositories now block direct commits and pushes to protected branches.\n'
