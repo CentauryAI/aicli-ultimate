@@ -37,7 +37,7 @@ AICLI_ULTIMATE_TARGETS=codex,claude,opencode,omp,antigravity \
 
 `AICLI_ULTIMATE_TARGETS` accepts any comma-separated subset of `codex`, `claude`, `opencode`, `omp`, and `antigravity`. Other optional variables include `AICLI_ULTIMATE_LSP=0|1`, `AICLI_ULTIMATE_EFFORT`, `CODEX_HOME`, `AICLI_ULTIMATE_REF`, `AICLI_ULTIMATE_INSTALL_DIR`, and `AICLI_ULTIMATE_BIN_DIR`. `AICLI_ULTIMATE_DRY_RUN=1` prints the selection plan and exits without changing anything.
 
-When `whiptail` is available, the installer shows a single checklist screen instead of sequential prompts. Re-running the installer upgrades in place: it reports the previous release, overwrites only files it owns, and removes owned files a newer release no longer ships (after backing them up).
+The installer shows a full-screen checklist TUI (ratatui, keyboard + mouse: click toggles, wheel scrolls) via a prebuilt `aicli-tui` binary from the release, or a local `cargo build` in a dev checkout; without either it falls back to `whiptail`, then to sequential prompts. Re-running the installer upgrades in place: it reports the previous release, overwrites only files it owns, and removes owned files a newer release no longer ships (after backing them up).
 
 ## Native adapters
 

@@ -70,40 +70,82 @@ ask() {
   fi
 }
 
+# Prefer the ratatui TUI (mouse support): prebuilt binary from the release,
+# or a local cargo build. Empty TUI_BIN = whiptail fallback.
+build_tui_bin() {
+  [[ -f "$ROOT/tui/Cargo.toml" ]] && command -v cargo >/dev/null 2>&1 || return 1
+  info "Building the setup TUI (one-time cargo build)"
+  cargo build --release --quiet --manifest-path "$ROOT/tui/Cargo.toml" 2>/dev/null \
+    && [[ -x "$ROOT/tui/target/release/aicli-tui" ]] \
+    && TUI_BIN="$ROOT/tui/target/release/aicli-tui"
+}
+
+resolve_tui_bin() {
+  TUI_BIN=""
+  local os arch url
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m)"
+  # dev checkout: the local source is newer than any published binary
+  if [[ -d "$ROOT/.git" ]] && build_tui_bin; then
+    return
+  fi
+  if [[ "$OFFLINE" != 1 ]] && command -v curl >/dev/null 2>&1; then
+    if [[ "$REF" == main ]]; then
+      url="https://github.com/$REPO_SLUG/releases/latest/download/aicli-tui-$os-$arch"
+    else
+      url="https://github.com/$REPO_SLUG/releases/download/$REF/aicli-tui-$os-$arch"
+    fi
+    [[ -n "$TEMP_DIR" ]] || TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/aicli-ultimate.XXXXXX")"
+    if curl -fsSL "$url" -o "$TEMP_DIR/aicli-tui" 2>/dev/null; then
+      chmod +x "$TEMP_DIR/aicli-tui"
+      TUI_BIN="$TEMP_DIR/aicli-tui"
+      return
+    fi
+  fi
+  build_tui_bin || true
+}
+
 run_tui() {
   local choices d_claude=OFF d_opencode=OFF d_omp=OFF d_agy=OFF
   command -v claude >/dev/null 2>&1 && d_claude=ON
   command -v opencode >/dev/null 2>&1 && d_opencode=ON
   command -v omp >/dev/null 2>&1 && d_omp=ON
   command -v agy >/dev/null 2>&1 && d_agy=ON
-  choices="$(whiptail --title "AI CLI Ultimate" --separate-output --checklist \
-    "Space toggles, arrows move, Enter confirms." 30 74 20 \
-    codex "Configure Codex" ON \
-    claude "Configure Claude Code" "$d_claude" \
-    opencode "Configure OpenCode" "$d_opencode" \
-    omp "Configure OMP (Oh My Pi)" "$d_omp" \
-    antigravity "Configure Antigravity CLI (agy)" "$d_agy" \
-    statusline "Powerline statuslines" ON \
-    lsp "LSP support (Rust, TS/JS, Python, GitHub Markdown)" ON \
-    caveman "Caveman plugin" ON \
-    caveman-always "Keep Caveman active by default" ON \
-    ponytail "Ponytail plugin" ON \
-    ponytail-always "Keep Ponytail active by default" ON \
-    orquestrator "HCOM Orquestrator mode" ON \
-    superpowers "Official Superpowers plugin (Codex)" ON \
-    centaury "CentauryAI protected-branch workflow" ON \
-    completions "Shell completions" ON \
-    security "Official Codex Security plugin (Codex)" OFF \
-    frontend "Optional frontend skills" OFF \
-    playwright "Optional Playwright testing skill" OFF \
-    react "Optional React best-practices skill" OFF \
-    webapp "Optional web-app testing skill (Anthropic)" OFF \
-    mcp-builder "Optional MCP builder skill (Anthropic)" OFF \
-    grill-with-docs "Optional plan-grilling skill with ADR docs" OFF \
-    security-bp "Optional security best-practices skill (OpenAI)" OFF \
-    diff-review "Optional differential security review skill (Trail of Bits)" OFF \
-    gh-fix-ci "Optional GitHub Actions fixer skill (OpenAI)" OFF \
-    </dev/tty 3>&1 1>&2 2>&3)" || return 1
+  local items=(
+    codex "Configure Codex" ON
+    claude "Configure Claude Code" "$d_claude"
+    opencode "Configure OpenCode" "$d_opencode"
+    omp "Configure OMP (Oh My Pi)" "$d_omp"
+    antigravity "Configure Antigravity CLI (agy)" "$d_agy"
+    statusline "Powerline statuslines" ON
+    lsp "LSP support (Rust, TS/JS, Python, GitHub Markdown)" ON
+    caveman "Caveman plugin" ON
+    caveman-always "Keep Caveman active by default" ON
+    ponytail "Ponytail plugin" ON
+    ponytail-always "Keep Ponytail active by default" ON
+    orquestrator "HCOM Orquestrator mode" ON
+    superpowers "Official Superpowers plugin (Codex)" ON
+    centaury "CentauryAI protected-branch workflow" ON
+    completions "Shell completions" ON
+    security "Official Codex Security plugin (Codex)" OFF
+    frontend "Optional frontend skills" OFF
+    playwright "Optional Playwright testing skill" OFF
+    react "Optional React best-practices skill" OFF
+    webapp "Optional web-app testing skill (Anthropic)" OFF
+    mcp-builder "Optional MCP builder skill (Anthropic)" OFF
+    grill-with-docs "Optional plan-grilling skill with ADR docs" OFF
+    security-bp "Optional security best-practices skill (OpenAI)" OFF
+    diff-review "Optional differential security review skill (Trail of Bits)" OFF
+    gh-fix-ci "Optional GitHub Actions fixer skill (OpenAI)" OFF
+  )
+  if [[ -n "$TUI_BIN" ]]; then
+    choices="$("$TUI_BIN" checklist "AI CLI Ultimate" "${items[@]}" </dev/tty)" || return 1
+  else
+    choices="$(whiptail --title "AI CLI Ultimate" --separate-output --checklist \
+      "Space toggles, arrows move, Enter confirms." 30 74 20 \
+      "${items[@]}" \
+      </dev/tty 3>&1 1>&2 2>&3)" || return 1
+  fi
   TARGET_CODEX=0 TARGET_CLAUDE=0 TARGET_OPENCODE=0 TARGET_OMP=0 TARGET_ANTIGRAVITY=0
   STATUSLINE=0 LSP=0 CAVEMAN=0 CAVEMAN_ALWAYS=0 PONYTAIL=0 PONYTAIL_ALWAYS=0
   ORQUESTRATOR=0 SUPERPOWERS=0 CENTAURY=0 COMPLETIONS=0 SECURITY=0
@@ -148,6 +190,12 @@ run_tui() {
   fi
   if [[ -n "${AICLI_ULTIMATE_EFFORT:-}" ]]; then
     EFFORT="$AICLI_ULTIMATE_EFFORT"
+  elif [[ -n "$TUI_BIN" ]]; then
+    EFFORT="$("$TUI_BIN" menu "Reasoning effort" \
+      xhigh "Best quality (default)" \
+      high "Balanced" \
+      medium "Fastest" \
+      </dev/tty)" || return 1
   else
     EFFORT="$(whiptail --title "AI CLI Ultimate" --menu "Reasoning effort" 12 50 3 \
       xhigh "Best quality (default)" \
@@ -883,12 +931,15 @@ if [[ -r "$STATE_FILE" ]]; then
 fi
 
 TUI_DONE=0
-if [[ "$NONINTERACTIVE" != 1 && -z "${AICLI_ULTIMATE_TARGETS:-}" && -r /dev/tty && -w /dev/tty ]] \
-  && command -v whiptail >/dev/null 2>&1; then
-  if run_tui; then
-    TUI_DONE=1
-  else
-    info "Selection cancelled in the checklist; using plain prompts."
+TUI_BIN=""
+if [[ "$NONINTERACTIVE" != 1 && -z "${AICLI_ULTIMATE_TARGETS:-}" && -r /dev/tty && -w /dev/tty ]]; then
+  resolve_tui_bin
+  if [[ -n "$TUI_BIN" ]] || command -v whiptail >/dev/null 2>&1; then
+    if run_tui; then
+      TUI_DONE=1
+    else
+      info "Selection cancelled in the checklist; using plain prompts."
+    fi
   fi
 fi
 
