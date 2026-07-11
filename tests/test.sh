@@ -358,19 +358,10 @@ printf '%s\n' \
   'printf "%s\\n" "$*" >>"$HCOM_TEST_LOG"' >"$TMP/hcom-bin/codex"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
-  'config_file="${HCOM_TEST_CONFIG:-$HOME/.hcom-test-codex-args}"' \
-  'if [[ "${1:-} ${2:-}" == "status --json" ]]; then' \
-  '  printf '\''{"tools":{"codex":{"hooks":false}}}\\n'\''' \
-  'elif [[ "${1:-} ${2:-}" == "config --json" ]]; then' \
-  '  python3 -c '\''import json,pathlib,sys; p=pathlib.Path(sys.argv[1]); print(json.dumps({"HCOM_CODEX_ARGS": p.read_text() if p.exists() else ""}))'\'' "$config_file"' \
-  'elif [[ "${1:-} ${2:-}" == "config codex_args" ]]; then' \
-  '  printf "%s" "${3:-}" >"$config_file"' \
-  'fi' \
-  'printf "%s\\n" "$*" >>"$HCOM_TEST_LOG"' >"$TMP/hcom-bin/hcom"
+  'touch "$HOME/.hcom-called"' \
+  'exit 1' >"$TMP/hcom-bin/hcom"
 chmod +x "$TMP/hcom-bin/codex" "$TMP/hcom-bin/hcom"
-printf '%s' '--search' >"$TMP/hcom.config"
 HCOM_TEST_LOG="$TMP/hcom.log" \
-HCOM_TEST_CONFIG="$TMP/hcom.config" \
 PATH="$TMP/hcom-bin:/usr/bin:/bin" \
 HOME="$TMP/hcom-home" \
 XDG_CONFIG_HOME="$TMP/hcom-home/.config" \
@@ -382,17 +373,13 @@ AICLI_ULTIMATE_LSP=0 \
 AICLI_ULTIMATE_TARGETS=codex \
 SHELL=/bin/bash \
   "$ROOT/install.sh" >/dev/null
-grep -qx 'hooks add codex' "$TMP/hcom.log"
-test -f "$TMP/hcom-home/.config/aicli-ultimate/hcom-hooks/codex"
+test ! -e "$TMP/hcom-home/.hcom-called"
 test -f "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-apollo-rust-best-practices"
 test -f "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
-test "$(cat "$TMP/hcom.config")" = '--search --profile aicli-ultimate'
-test -f "$TMP/hcom-home/.config/aicli-ultimate/hcom-codex-args.json"
 for plugin in caveman ponytail centaury-workflow orquestrator; do
   test -f "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-$plugin"
 done
 HCOM_TEST_LOG="$TMP/hcom.log" \
-HCOM_TEST_CONFIG="$TMP/hcom.config" \
 PATH="$TMP/hcom-bin:/usr/bin:/bin" \
 HOME="$TMP/hcom-home" \
 XDG_CONFIG_HOME="$TMP/hcom-home/.config" \
@@ -401,12 +388,9 @@ AICLI_ULTIMATE_INSTALL_DIR="$TMP/hcom-home/.local/share/aicli-ultimate" \
 AICLI_ULTIMATE_BIN_DIR="$TMP/hcom-home/.local/bin" \
 AICLI_ULTIMATE_NONINTERACTIVE=1 \
   "$TMP/hcom-home/.local/share/aicli-ultimate/uninstall.sh" >/dev/null
-grep -qx 'hooks remove codex' "$TMP/hcom.log"
-test ! -e "$TMP/hcom-home/.config/aicli-ultimate/hcom-hooks/codex"
+test ! -e "$TMP/hcom-home/.hcom-called"
 test ! -e "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-apollo-rust-best-practices"
 test ! -e "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
-test "$(cat "$TMP/hcom.config")" = '--search'
-test ! -e "$TMP/hcom-home/.config/aicli-ultimate/hcom-codex-args.json"
 
 mkdir -p "$TMP/shared-home"
 HCOM_TEST_LOG="$TMP/shared.log" \
@@ -428,13 +412,11 @@ grep -q '^codex_skills=shared$' "$TMP/shared-home/.config/aicli-ultimate/modes"
 grep -Fq 'Codex diagnostics: aicli-ultimate --doctor' "$TMP/shared.out"
 grep -Fq 'use `$orquestrator-hcom`' "$TMP/shared.out"
 grep -Fq '`/orchestration` is not a Codex command' "$TMP/shared.out"
-grep -Fq '`hcom codex` cannot use external Powerline' "$TMP/shared.out"
+test ! -e "$TMP/shared-home/.hcom-called"
 
 mkdir -p "$TMP/legacy-home/.config/aicli-ultimate/native-plugins"
 touch "$TMP/legacy-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
-printf '%s' '--profile custom --search' >"$TMP/legacy.config"
 HCOM_TEST_LOG="$TMP/legacy.log" \
-HCOM_TEST_CONFIG="$TMP/legacy.config" \
 CODEX_LEGACY=1 \
 PATH="$TMP/hcom-bin:/usr/bin:/bin" \
 HOME="$TMP/legacy-home" \
@@ -452,8 +434,6 @@ for plugin in caveman ponytail centaury-workflow orquestrator apollo-rust-best-p
 done
 grep -qx 'plugin marketplace remove aicli-ultimate' "$TMP/legacy.log"
 test ! -e "$TMP/legacy-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
-test "$(cat "$TMP/legacy.config")" = '--profile custom --search'
-test ! -e "$TMP/legacy-home/.config/aicli-ultimate/hcom-codex-args.json"
 
 mkdir -p "$TMP/preinstalled-home"
 HCOM_TEST_LOG="$TMP/preinstalled.log" \

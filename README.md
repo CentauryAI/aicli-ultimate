@@ -77,7 +77,7 @@ Claude plugins include their upstream `SessionStart`, `UserPromptSubmit`, and su
 
 ## HCOM Orquestrator
 
-The optional `orquestrator-hcom` skill delegates work through [hcom](https://github.com/aannoo/hcom), a multi-agent orchestration runtime. It enables pure delegation, threaded worker/reviewer coordination, event-driven monitoring, and CentauryAI-safe branch/PR rules. When selected, AI CLI Ultimate installs a pinned, checksum-verified hcom release if missing, enables its hooks only for selected CLIs, and adds `--profile aicli-ultimate` to HCOM's Codex arguments unless the user already chose a profile. Existing arguments and hooks are preserved and restored on uninstall. HCOM 0.7.23 has no Codex executable override, so `hcom codex` loads the profile/theme but cannot use the external tmux Powerline; launch `codex` or `aicli-ultimate` when Powerline is required.
+The optional `orquestrator-hcom` skill delegates work through [hcom](https://github.com/CentauryAI/orquestrator-package), a multi-agent orchestration runtime. It enables pure delegation, threaded worker/reviewer coordination, event-driven monitoring, and CentauryAI-safe branch/PR rules. The installer does not install hcom itself — it must be installed separately through the orquestrator-package. HCOM hooks are managed by that package, not by AI CLI Ultimate.
 
 ## CentauryAI safety workflow
 
@@ -107,7 +107,7 @@ Codex Powerline requires `tmux` and Bash 3.2 or later; without tmux, the install
 ```
 
 The uninstaller removes setup-owned plugins, GitHub LSP, wrappers, LSP bridge, shell block, OpenCode/OMP LSP settings, and conditional Git guard. Backups remain available and restoration is optional.
-Failed HCOM-hook or native-plugin removals keep their ownership markers so rerunning the uninstaller can retry safely.
+HCOM hooks are managed by the orquestrator-package and must be removed through that package's uninstaller. Failed native-plugin removals keep their ownership markers so rerunning the uninstaller can retry safely.
 
 ## Development
 
