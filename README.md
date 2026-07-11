@@ -12,7 +12,7 @@ The installer detects installed CLIs and asks which ones to configure. Safe defa
 
 - high-effort Codex configuration, memories, multi-agent support, goals, and plugins when Codex is selected;
 - native global English instructions for every selected CLI;
-- essential Rust, TypeScript/JavaScript, and Python language servers with native LSP integration where supported;
+- essential Rust, TypeScript/JavaScript, Python, and GitHub Markdown language servers with native LSP integration where supported;
 - Caveman and Ponytail modes;
 - native Caveman/Ponytail lifecycle plugins where each host supports them;
 - optional HCOM Orquestrator mode and a portable pure-delegation skill;
@@ -39,19 +39,21 @@ AICLI_ULTIMATE_TARGETS=codex,claude,opencode,omp,antigravity \
 
 | CLI | Global rules | Skills/plugins | Extra configuration |
 |---|---|---|---|
-| Codex | `~/.codex/AGENTS.md` | bundled Codex marketplace | token-limited `mcpls` bridge, profile, agents, Midnight Blue, Powerline |
-| Claude Code | `~/.claude/CLAUDE.md` | personal skills + official Caveman/Ponytail/LSP plugins | Rust, TypeScript/JavaScript, and Python LSP; lifecycle hooks, subagents, Powerline |
-| OpenCode | `~/.config/opencode/AGENTS.md` | shared skills + Ponytail server plugin | built-in LSP enabled, subagents, Tokyo Night, native TUI plugin |
-| OMP | `~/AGENTS.md` | shared skills + Ponytail Pi plugin | built-in lazy LSP auto-detection, native full Powerline plus footer hook |
-| Antigravity CLI | global plugin rule | aggregate skills + official Caveman/Ponytail plugins | token-limited `mcpls` bridge, native extensions, command statusline |
+| Codex | `~/.codex/AGENTS.md` | bundled Codex marketplace | Rust, TypeScript, Python, and GitHub Markdown through the token-limited `mcpls` bridge; profile, agents, Midnight Blue, Powerline |
+| Claude Code | `~/.claude/CLAUDE.md` | personal skills + official Caveman/Ponytail/LSP plugins + bundled GitHub LSP plugin | Rust, TypeScript/JavaScript, Python, and GitHub Markdown LSP; lifecycle hooks, subagents, Powerline |
+| OpenCode | `~/.config/opencode/AGENTS.md` | shared skills + Ponytail server plugin | built-in Rust/TypeScript/Python LSP plus GitHub Markdown, subagents, Tokyo Night, native TUI plugin |
+| OMP | `~/AGENTS.md` | shared skills + Ponytail Pi plugin | lazy Rust/TypeScript/Python auto-detection plus GitHub Markdown, native full Powerline plus footer hook |
+| Antigravity CLI | global plugin rule | aggregate skills + official Caveman/Ponytail plugins | Rust, TypeScript, Python, and GitHub Markdown through the token-limited `mcpls` bridge; native extensions, command statusline |
 
 Managed instruction blocks and JSON path updates preserve unrelated content. Existing statusline settings are backed up and restored by the uninstaller. Files and skill directories owned by another setup are never replaced.
 
 ## Language servers
 
-The default LSP set is deliberately small: `rust-analyzer`, `typescript-language-server` plus `typescript`, and `pyright`. Missing binaries are installed through `rustup` and `npm`; existing installations are reused. Claude Code receives its three official LSP plugins. OpenCode enables built-in LSP plus its focused experimental LSP tool. OMP discovers these binaries lazily from project markers.
+The default LSP set is deliberately small: `rust-analyzer`, `typescript-language-server` plus `typescript`, `pyright`, and [`github-language-server/github-lsp`](https://github.com/github-language-server/github-lsp). Missing Rust and Node binaries are installed through `rustup` and `npm`; the pinned GitHub LSP release is checksum-verified. Existing installations are reused. GitHub LSP requires an installed and authenticated `gh` CLI and provides GitHub Markdown completions and hover information for issues, pull requests, wikis, owners, repositories, and organization members.
 
-Codex and Antigravity CLI do not expose a native LSP client, so AI CLI Ultimate installs the pinned, checksum-verified [`mcpls`](https://github.com/bug-ops/mcpls) MCP bridge for those hosts. Only six read-only semantic tools are exposed: hover, definition, references, workspace symbol search, diagnostics, and implementations. This keeps the MCP schema small and excludes completion, formatting, mutation, logs, and other noisy tools. The bridge and its config are removed on uninstall; shared language-server binaries remain because other editors and agents may use them.
+Claude Code receives official Rust, TypeScript, and Python LSP plugins plus the bundled GitHub LSP plugin. OpenCode enables its built-in servers and a custom GitHub Markdown entry. OMP discovers Rust, TypeScript, and Python lazily and loads GitHub LSP from its user LSP config.
+
+Codex and Antigravity CLI do not expose a native LSP client, so AI CLI Ultimate uses the pinned, checksum-verified [`mcpls`](https://github.com/bug-ops/mcpls) bridge for those hosts. Seven focused semantic tools are exposed: hover, definition, references, workspace symbol search, diagnostics, implementations, and completions. Formatting, mutation, logs, and other noisy tools remain excluded. This is an LSP bridge, not GitHub MCP Server; no GitHub API MCP is installed. Uninstall removes the bridge, its config, and the setup-owned GitHub LSP binary. Shared Rust, TypeScript, and Python binaries remain available to other editors and agents.
 
 ## Skills and plugins
 
@@ -100,7 +102,7 @@ Codex Powerline dependencies: `tmux`, `jq`, `sqlite3`, `git`, Bash 3.2 or later,
 ~/.local/share/aicli-ultimate/uninstall.sh
 ```
 
-The uninstaller removes setup-owned plugins, wrappers, LSP bridge, shell block, OpenCode LSP settings, and conditional Git guard. Backups remain available and restoration is optional.
+The uninstaller removes setup-owned plugins, GitHub LSP, wrappers, LSP bridge, shell block, OpenCode/OMP LSP settings, and conditional Git guard. Backups remain available and restoration is optional.
 Failed HCOM-hook or native-plugin removals keep their ownership markers so rerunning the uninstaller can retry safely.
 
 ## Development

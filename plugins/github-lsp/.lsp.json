@@ -1,0 +1,9 @@
+{
+  "github-lsp": {
+    "command": "github-lsp",
+    "extensionToLanguage": {
+      ".md": "markdown",
+      ".markdown": "markdown"
+    }
+  }
+}

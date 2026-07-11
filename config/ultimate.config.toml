@@ -27,7 +27,7 @@ config_file = "@CODEX_HOME@/agents/ultimate-reviewer.toml"
 command = "@MCPLS_BIN@"
 args = ["--config", "@MCPLS_CONFIG@"]
 enabled = @LSP_ENABLED@
-enabled_tools = ["get_hover", "get_definition", "get_references", "workspace_symbol_search", "get_diagnostics", "go_to_implementation"]
+enabled_tools = ["get_hover", "get_definition", "get_references", "workspace_symbol_search", "get_diagnostics", "go_to_implementation", "get_completions"]
 
 [tui]
 theme = "midnight-blue"

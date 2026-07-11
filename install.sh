@@ -11,6 +11,7 @@ INSTALL_DIR="${AICLI_ULTIMATE_INSTALL_DIR:-$HOME/.local/share/aicli-ultimate}"
 BIN_DIR="${AICLI_ULTIMATE_BIN_DIR:-$HOME/.local/bin}"
 STATE_FILE="$CONFIG_HOME/install-state.json"
 MCPLS_VERSION="0.3.7"
+GITHUB_LSP_VERSION="24.03.10"
 HCOM_VERSION="0.7.23"
 HCOM_INSTALLER_SHA256="5834dee99af05a039a259a81c43335913ec68920c627ead4cae638c652f649b2"
 HCOM_INSTALLER_URL="https://github.com/aannoo/hcom/releases/download/v$HCOM_VERSION/hcom-installer.sh"
@@ -185,9 +186,78 @@ install_language_servers() {
     fi
   fi
 
+  install_github_lsp
+
   if [[ "$TARGET_CODEX" == 1 || "$TARGET_ANTIGRAVITY" == 1 ]]; then
     install_mcpls
   fi
+}
+
+install_github_lsp() {
+  local os arch platform asset checksum server_tmp archive marker
+  marker="$GITHUB_LSP_BIN.aicli-ultimate-owned"
+  if [[ -x "$GITHUB_LSP_BIN" && -f "$marker" ]]; then
+    [[ "$(cat "$marker")" == "$GITHUB_LSP_VERSION" ]] && return 0
+  elif command -v github-lsp >/dev/null 2>&1; then
+    return 0
+  fi
+  command -v curl >/dev/null 2>&1 || { warn "github-lsp requires curl; GitHub Markdown LSP was not installed."; return; }
+  command -v tar >/dev/null 2>&1 || { warn "github-lsp requires tar with xz support; GitHub Markdown LSP was not installed."; return; }
+
+  os="$(uname -s)"
+  arch="$(uname -m)"
+  case "$os:$arch" in
+    Linux:x86_64|Linux:amd64)
+      platform=x86_64-linux
+      checksum=c06cf4e13d83f4a7712ba5e76ec8d319a14351d0417deb86b1f1782e8327bc0d
+      ;;
+    Linux:aarch64|Linux:arm64)
+      platform=aarch64-linux
+      checksum=f85e64ce3d8d9447da06379cec38c41f601d11758cf336757d1d09955b1a9024
+      ;;
+    Darwin:x86_64|Darwin:amd64)
+      platform=x86_64-macos
+      checksum=127431ba1fcd44c238c6e858071d4be5271d0d1932fa6d176234df115930e046
+      ;;
+    Darwin:aarch64|Darwin:arm64)
+      platform=aarch64-macos
+      checksum=4016c3e613d6adc527129632d9f2e55238924049b714bfb9b5ae98afc3427c66
+      ;;
+    *) warn "github-lsp has no supported binary for $os/$arch; GitHub Markdown LSP was not installed."; return ;;
+  esac
+
+  asset="github-lsp-$GITHUB_LSP_VERSION-$platform.tar.xz"
+  server_tmp="$(mktemp -d "${TMPDIR:-/tmp}/aicli-github-lsp.XXXXXX")"
+  archive="$server_tmp/$asset"
+  if ! curl -fsSL "https://github.com/github-language-server/github-lsp/releases/download/$GITHUB_LSP_VERSION/$asset" -o "$archive"; then
+    rm -rf "$server_tmp"
+    warn "Could not download github-lsp $GITHUB_LSP_VERSION."
+    return
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$server_tmp" && printf '%s  %s\n' "$checksum" "$asset" | sha256sum -c - >/dev/null) \
+      || { rm -rf "$server_tmp"; warn "github-lsp checksum verification failed."; return; }
+  elif command -v shasum >/dev/null 2>&1; then
+    (cd "$server_tmp" && printf '%s  %s\n' "$checksum" "$asset" | shasum -a 256 -c - >/dev/null) \
+      || { rm -rf "$server_tmp"; warn "github-lsp checksum verification failed."; return; }
+  else
+    rm -rf "$server_tmp"
+    warn "No SHA-256 utility found; refusing to install github-lsp without verification."
+    return
+  fi
+  if tar -xJf "$archive" -C "$server_tmp" --strip-components=1 \
+    && [[ -f "$server_tmp/github-lsp" ]]; then
+    install_owned_file "$server_tmp/github-lsp" "$GITHUB_LSP_BIN"
+    if [[ -f "$marker" ]]; then
+      chmod +x "$GITHUB_LSP_BIN"
+      printf '%s\n' "$GITHUB_LSP_VERSION" >"$marker"
+    else
+      warn "Keeping existing unowned github-lsp path without changing its permissions: $GITHUB_LSP_BIN"
+    fi
+  else
+    warn "Could not extract github-lsp $GITHUB_LSP_VERSION."
+  fi
+  rm -rf "$server_tmp"
 }
 
 install_mcpls() {
@@ -269,7 +339,7 @@ configure_shell() {
   mv "$rc.tmp" "$rc"
   {
     printf '\n%s\n' "$marker_start"
-    printf 'export PATH="$HOME/.local/bin:$PATH"\n'
+    printf 'export PATH="%s:$PATH"\n' "$BIN_DIR"
     [[ "$TARGET_OPENCODE" == 1 && "$LSP" == 1 ]] \
       && printf 'export OPENCODE_EXPERIMENTAL_LSP_TOOL=true\n'
     [[ "$TARGET_CODEX" == 1 ]] && printf "alias codex='aicli-ultimate'\n"
@@ -592,6 +662,8 @@ install_native_mode_plugins() {
       install_claude_plugin anthropics/claude-plugins-official claude-plugins-official rust-analyzer-lsp@claude-plugins-official
       install_claude_plugin anthropics/claude-plugins-official claude-plugins-official typescript-lsp@claude-plugins-official
       install_claude_plugin anthropics/claude-plugins-official claude-plugins-official pyright-lsp@claude-plugins-official
+      [[ "$GITHUB_LSP_READY" == 1 ]] \
+        && install_claude_plugin "$INSTALL_DIR" aicli-ultimate github-lsp@aicli-ultimate
     fi
   fi
 
@@ -661,9 +733,10 @@ if [[ -n "${AICLI_ULTIMATE_LSP:-}" ]]; then
   [[ "$AICLI_ULTIMATE_LSP" =~ ^[01]$ ]] || die "AICLI_ULTIMATE_LSP must be 0 or 1"
   LSP="$AICLI_ULTIMATE_LSP"
 else
-  ask "Install essential LSP support (Rust, TypeScript/JavaScript, and Python)?" y && LSP=1 || LSP=0
+  ask "Install essential LSP support (Rust, TypeScript/JavaScript, Python, and GitHub Markdown)?" y && LSP=1 || LSP=0
 fi
 MCPLS_BIN="$BIN_DIR/aicli-mcpls"
+GITHUB_LSP_BIN="$BIN_DIR/github-lsp"
 ask "Install the Caveman plugin?" y && CAVEMAN=1 || CAVEMAN=0
 if [[ "$CAVEMAN" == 1 ]] && ask "Keep Caveman active by default?" y; then CAVEMAN_ALWAYS=1; else CAVEMAN_ALWAYS=0; fi
 ask "Install the Ponytail plugin?" y && PONYTAIL=1 || PONYTAIL=0
@@ -695,6 +768,7 @@ for file in "$CODEX_HOME/config.toml" "$CODEX_HOME/aicli-ultimate.config.toml" "
   "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json" \
   "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/package.json" "$HOME/AGENTS.md" \
   "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/config.yml" \
+  "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/lsp.json" \
   "$HOME/.gemini/antigravity-cli/settings.json" \
   "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
   backup_file "$file" "$backup"
@@ -748,6 +822,19 @@ if [[ "$LSP" == 1 ]] && { [[ "$DRY_RUN" == 1 ]] \
 else
   BRIDGE_READY=0
 fi
+if [[ "$LSP" == 1 ]] && { [[ "$DRY_RUN" == 1 ]] \
+  || command -v github-lsp >/dev/null 2>&1 || [[ -x "$GITHUB_LSP_BIN" ]]; }; then
+  GITHUB_LSP_READY=1
+else
+  GITHUB_LSP_READY=0
+fi
+if [[ "$GITHUB_LSP_READY" == 1 && "$DRY_RUN" != 1 ]]; then
+  if ! command -v gh >/dev/null 2>&1; then
+    warn "github-lsp requires the gh CLI; install and authenticate gh before use."
+  elif ! gh auth status >/dev/null 2>&1; then
+    warn "github-lsp requires an authenticated gh CLI; run: gh auth login"
+  fi
+fi
 
 if [[ "$TARGET_CODEX" == 1 ]]; then
   mkdir -p "$CODEX_HOME/agents" "$CODEX_HOME/themes"
@@ -800,9 +887,16 @@ if [[ "$TARGET_OPENCODE" == 1 ]]; then
   python3 "$ROOT/scripts/json_add.py" "$opencode_home/tui.json" theme '"tokyonight"' \
     || warn "Keeping the existing OpenCode theme."
   if [[ "$LSP" == 1 ]]; then
-    python3 "$ROOT/scripts/json_add.py" "$opencode_home/opencode.json" lsp true \
-      "$CONFIG_HOME/opencode-lsp-owned" \
-      || warn "Keeping the existing OpenCode LSP configuration."
+    github_lsp_json='{"command":["github-lsp"],"extensions":[".md",".markdown"]}'
+    if [[ "$GITHUB_LSP_READY" == 1 ]]; then
+      python3 "$ROOT/scripts/json_lsp.py" add "$opencode_home/opencode.json" github-lsp \
+        "$github_lsp_json" "$CONFIG_HOME/opencode-github-lsp-state.json" \
+        || warn "Keeping the existing OpenCode LSP configuration."
+    else
+      python3 "$ROOT/scripts/json_add.py" "$opencode_home/opencode.json" lsp true \
+        "$CONFIG_HOME/opencode-lsp-owned" \
+        || warn "Keeping the existing OpenCode LSP configuration."
+    fi
     python3 "$ROOT/scripts/json_add.py" "$opencode_home/opencode.json" permission.lsp '"allow"' \
       "$CONFIG_HOME/opencode-lsp-permission-owned" \
       || warn "Keeping the existing OpenCode LSP permission."
@@ -818,6 +912,13 @@ fi
 
 if [[ "$TARGET_OMP" == 1 ]]; then
   upsert_managed_block "$HOME/AGENTS.md" "$CONFIG_HOME/global-instructions.md"
+  if [[ "$LSP" == 1 && "$GITHUB_LSP_READY" == 1 ]]; then
+    omp_lsp_json='{"command":"github-lsp","args":[],"fileTypes":[".md",".markdown"],"rootMarkers":[".git"]}'
+    python3 "$ROOT/scripts/json_object_add.py" \
+      "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/lsp.json" servers github-lsp \
+      "$omp_lsp_json" "$CONFIG_HOME/omp-github-lsp-owned" \
+      || warn "Keeping the existing OMP github-lsp configuration."
+  fi
   [[ "$STATUSLINE" == 1 ]] && configure_omp_statusline
 fi
 

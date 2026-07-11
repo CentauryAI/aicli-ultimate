@@ -10,6 +10,30 @@ for script in "$ROOT/install.sh" "$ROOT/uninstall.sh" "$ROOT/statusline/codex-po
 done
 
 python3 -m py_compile "$ROOT/scripts/"*.py
+python3 -m json.tool "$ROOT/.claude-plugin/marketplace.json" >/dev/null
+python3 -m json.tool "$ROOT/plugins/github-lsp/.claude-plugin/plugin.json" >/dev/null
+python3 -m json.tool "$ROOT/plugins/github-lsp/.lsp.json" >/dev/null
+if command -v claude >/dev/null 2>&1; then
+  claude plugin validate --strict "$ROOT" >/dev/null
+  claude plugin validate --strict "$ROOT/plugins/github-lsp" >/dev/null
+fi
+
+printf '{"custom":"kept","lsp":true}\n' >"$TMP/opencode-lsp.json"
+github_lsp_json='{"command":["github-lsp"],"extensions":[".md",".markdown"]}'
+python3 "$ROOT/scripts/json_lsp.py" add "$TMP/opencode-lsp.json" github-lsp \
+  "$github_lsp_json" "$TMP/opencode-lsp-state.json"
+jq -e '.custom == "kept" and .lsp["github-lsp"].command == ["github-lsp"]' \
+  "$TMP/opencode-lsp.json" >/dev/null
+python3 "$ROOT/scripts/json_lsp.py" remove "$TMP/opencode-lsp.json" github-lsp \
+  "$TMP/opencode-lsp-state.json"
+jq -e '.custom == "kept" and .lsp == true' "$TMP/opencode-lsp.json" >/dev/null
+
+printf '{"lsp":{"rust":{"disabled":true}}}\n' >"$TMP/opencode-lsp-object.json"
+python3 "$ROOT/scripts/json_lsp.py" add "$TMP/opencode-lsp-object.json" github-lsp \
+  "$github_lsp_json" "$TMP/opencode-lsp-object-state.json"
+python3 "$ROOT/scripts/json_lsp.py" remove "$TMP/opencode-lsp-object.json" github-lsp \
+  "$TMP/opencode-lsp-object-state.json"
+jq -e '.lsp == {"rust":{"disabled":true}}' "$TMP/opencode-lsp-object.json" >/dev/null
 
 printf '{"statusLine":{"type":"","command":"status","enabled":true}}\n' >"$TMP/normalized.json"
 printf '{"existed":false,"value":null,"installed_value":{"command":"status","enabled":true,"stack_with_default":false}}\n' >"$TMP/normalized-state.json"
@@ -53,6 +77,7 @@ grep -q -- '--profile' "$TMP/home/.local/bin/aicli-ultimate"
 grep -q 'model_reasoning_effort = "xhigh"' "$TMP/home/.codex/aicli-ultimate.config.toml"
 grep -q '^\[mcp_servers.aicli_lsp\]$' "$TMP/home/.codex/aicli-ultimate.config.toml"
 grep -q '^enabled = true$' "$TMP/home/.codex/aicli-ultimate.config.toml"
+grep -q '"get_completions"' "$TMP/home/.codex/aicli-ultimate.config.toml"
 python3 - "$TMP/home/.codex/aicli-ultimate.config.toml" <<'PY'
 import sys, tomllib
 with open(sys.argv[1], "rb") as handle:
@@ -74,7 +99,7 @@ jq -e '(.plugin | length) == 2 and (.plugin[1] | endswith("/aicli-ultimate/statu
   "$TMP/home/.config/opencode/tui.json" >/dev/null
 jq -e '.plugin == ["existing-server-plugin", "@dietrichgebert/ponytail"]' \
   "$TMP/home/.config/opencode/opencode.json" >/dev/null
-jq -e '.lsp == true and .permission.lsp == "allow"' \
+jq -e '.lsp["github-lsp"].command == ["github-lsp"] and .permission.lsp == "allow"' \
   "$TMP/home/.config/opencode/opencode.json" >/dev/null
 jq -e '.dependencies["@opentui/core"] == "*"' "$TMP/home/.config/opencode/package.json" >/dev/null
 jq -e '.custom == "preserved" and (.statusLine.command | endswith("/claude-ultimate-status"))' \
@@ -84,14 +109,17 @@ jq -e '.custom == "preserved" and .statusLine.type == "" and .statusLine.enabled
 grep -q '"name": "aicli-ultimate"' "$TMP/home/.gemini/config/plugins/aicli-ultimate/plugin.json"
 jq -e '.mcpServers["aicli-lsp"].command | endswith("/.local/bin/aicli-mcpls")' \
   "$TMP/home/.gemini/config/plugins/aicli-ultimate/mcp_config.json" >/dev/null
-jq -e '.mcpServers["aicli-lsp"].disabledTools | length == 14' \
+jq -e '(.mcpServers["aicli-lsp"].disabledTools | length) == 13 and (.mcpServers["aicli-lsp"].disabledTools | index("get_completions") | not)' \
   "$TMP/home/.gemini/config/plugins/aicli-ultimate/mcp_config.json" >/dev/null
+test -f "$TMP/home/.omp/agent/lsp.json"
+jq -e '.servers["github-lsp"].command == "github-lsp"' \
+  "$TMP/home/.omp/agent/lsp.json" >/dev/null
 test -f "$TMP/home/.config/aicli-ultimate/mcpls.toml"
 python3 - "$TMP/home/.config/aicli-ultimate/mcpls.toml" <<'PY'
 import sys, tomllib
 with open(sys.argv[1], "rb") as handle:
     config = tomllib.load(handle)
-assert [server["language_id"] for server in config["lsp_servers"]] == ["rust", "typescript", "python"]
+assert [server["language_id"] for server in config["lsp_servers"]] == ["rust", "typescript", "python", "markdown"]
 PY
 test -f "$TMP/home/.claude/skills/caveman/SKILL.md"
 test -f "$TMP/home/.agents/skills/ponytail/SKILL.md"
@@ -151,6 +179,7 @@ grep -q '^set -g status-interval 10$' "$TMP/home/.config/aicli-ultimate/tmux.con
 ! grep -q "alias omp=" "$TMP/home/.bashrc"
 ! grep -q "alias agy=" "$TMP/home/.bashrc"
 grep -q '^export OPENCODE_EXPERIMENTAL_LSP_TOOL=true$' "$TMP/home/.bashrc"
+grep -Fq "export PATH=\"$TMP/home/.local/bin:\$PATH\"" "$TMP/home/.bashrc"
 grep -q '^lsp=enabled$' "$TMP/home/.config/aicli-ultimate/modes"
 grep -q 'Prefer native LSP tools' "$TMP/home/.codex/AGENTS.md"
 
@@ -218,6 +247,7 @@ jq -e 'has("lsp") | not' "$TMP/home/.config/opencode/opencode.json" >/dev/null
 jq -e 'has("permission") | not' "$TMP/home/.config/opencode/opencode.json" >/dev/null
 test ! -e "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
 test ! -e "$TMP/home/.omp/agent/extensions/aicli-ultimate-statusline.ts"
+! jq -e '.servers["github-lsp"]' "$TMP/home/.omp/agent/lsp.json" >/dev/null
 test ! -e "$TMP/home/.config/aicli-ultimate/mcpls.toml"
 test ! -e "$TMP/home/.claude/skills/rust-best-practices"
 test ! -e "$TMP/home/.agents/skills/rust-best-practices"
