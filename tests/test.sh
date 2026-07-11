@@ -9,6 +9,30 @@ for script in "$ROOT/install.sh" "$ROOT/uninstall.sh" "$ROOT/statusline/codex-po
   bash -n "$script"
 done
 
+# Missing tmux is installed through the detected package manager.
+mkdir -p "$TMP/tmux-bin"
+sed -n \
+  -e '/^run_as_root()/,/^}/p' \
+  -e '/^install_tmux_if_missing()/,/^}/p' \
+  "$ROOT/install.sh" >"$TMP/install-tmux-functions.sh"
+ln -s "$(command -v env)" "$TMP/tmux-bin/env"
+ln -s "$(command -v uname)" "$TMP/tmux-bin/uname"
+printf '%s\n' '#!/bin/sh' 'exec "$@"' >"$TMP/tmux-bin/sudo"
+printf '%s\n' \
+  '#!/bin/sh' \
+  'printf "%s\n" "$*" >>"$TMUX_TEST_LOG"' \
+  'if [ "$*" = "install -y tmux" ]; then' \
+  '  printf "%s\n" "#!/bin/sh" "exit 0" >"$TMUX_TEST_BIN/tmux"' \
+  '  /bin/chmod +x "$TMUX_TEST_BIN/tmux"' \
+  'fi' >"$TMP/tmux-bin/apt-get"
+chmod +x "$TMP/tmux-bin/sudo" "$TMP/tmux-bin/apt-get"
+TMUX_TEST_BIN="$TMP/tmux-bin" TMUX_TEST_LOG="$TMP/tmux.log" PATH="$TMP/tmux-bin" \
+  OFFLINE=0 /bin/bash -c 'warn() { :; }; info() { :; }; source "$1"; install_tmux_if_missing' \
+  _ "$TMP/install-tmux-functions.sh"
+grep -qx 'update' "$TMP/tmux.log"
+grep -qx 'install -y tmux' "$TMP/tmux.log"
+test -x "$TMP/tmux-bin/tmux"
+
 # Optional metric tools must not disable or spam the Codex Powerline.
 mkdir -p "$TMP/status-bin" "$TMP/status-home/.config/aicli-ultimate"
 for command in awk date head mkdir mv rmdir sed stat tail tr wc; do
