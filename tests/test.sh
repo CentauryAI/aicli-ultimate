@@ -20,6 +20,8 @@ jq -e '.installed_value.type == "" and (.installed_value | has("stack_with_defau
   "$TMP/normalized-state.json" >/dev/null
 
 python3 -m json.tool "$ROOT/.agents/plugins/marketplace.json" >/dev/null
+jq -e '.plugins | any(.name == "apollo-rust-best-practices" and .source.path == "./plugins/apollo-rust-best-practices")' \
+  "$ROOT/.agents/plugins/marketplace.json" >/dev/null
 for manifest in "$ROOT"/plugins/*/.codex-plugin/plugin.json; do
   python3 -m json.tool "$manifest" >/dev/null
 done
@@ -97,6 +99,12 @@ test -f "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/centaury-branch-
 test -f "$TMP/home/.claude/skills/orquestrator-hcom/SKILL.md"
 test -f "$TMP/home/.agents/skills/orquestrator-hcom/SKILL.md"
 test -f "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/orquestrator-hcom/SKILL.md"
+test -f "$TMP/home/.claude/skills/rust-best-practices/SKILL.md"
+test -f "$TMP/home/.claude/skills/rust-best-practices/references/chapter_09.md"
+test -f "$TMP/home/.agents/skills/rust-best-practices/SKILL.md"
+test -f "$TMP/home/.agents/skills/rust-best-practices/references/chapter_09.md"
+test -f "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/rust-best-practices/SKILL.md"
+test -f "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/rust-best-practices/references/chapter_09.md"
 test -f "$TMP/home/.claude/agents/ultimate-reviewer.md"
 test -f "$TMP/home/.config/opencode/agents/ultimate-reviewer.md"
 test -f "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
@@ -175,6 +183,8 @@ jq -e 'has("permission") | not' "$TMP/home/.config/opencode/opencode.json" >/dev
 test ! -e "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
 test ! -e "$TMP/home/.omp/agent/extensions/aicli-ultimate-statusline.ts"
 test ! -e "$TMP/home/.config/aicli-ultimate/mcpls.toml"
+test ! -e "$TMP/home/.claude/skills/rust-best-practices"
+test ! -e "$TMP/home/.agents/skills/rust-best-practices"
 
 mkdir -p "$TMP/no-lsp-home"
 HOME="$TMP/no-lsp-home" \
@@ -215,6 +225,82 @@ AICLI_ULTIMATE_NONINTERACTIVE=1 \
   "$TMP/preserved-home/.local/share/aicli-ultimate/uninstall.sh" >/dev/null
 jq -e '.plugin == ["@dietrichgebert/ponytail"] and .lsp == true and .permission.lsp == "allow"' \
   "$TMP/preserved-home/.config/opencode/opencode.json" >/dev/null
+
+mkdir -p "$TMP/hcom-bin" "$TMP/hcom-home"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'if [[ "${CODEX_PREINSTALLED:-0}" == 1 && "$*" == "plugin list" ]]; then' \
+  '  printf "apollo-rust-best-practices@aicli-ultimate  installed\\n"' \
+  'elif [[ "${CODEX_PREINSTALLED:-0}" == 1 && "$*" == "plugin marketplace list" ]]; then' \
+  '  printf "aicli-ultimate  installed\\n"' \
+  'fi' \
+  'printf "%s\\n" "$*" >>"$HCOM_TEST_LOG"' >"$TMP/hcom-bin/codex"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'if [[ "${1:-} ${2:-}" == "status --json" ]]; then' \
+  '  printf '\''{"tools":{"codex":{"hooks":false}}}\\n'\''' \
+  'else' \
+  '  printf "%s\\n" "$*" >>"$HCOM_TEST_LOG"' \
+  'fi' >"$TMP/hcom-bin/hcom"
+chmod +x "$TMP/hcom-bin/codex" "$TMP/hcom-bin/hcom"
+HCOM_TEST_LOG="$TMP/hcom.log" \
+PATH="$TMP/hcom-bin:/usr/bin:/bin" \
+HOME="$TMP/hcom-home" \
+XDG_CONFIG_HOME="$TMP/hcom-home/.config" \
+CODEX_HOME="$TMP/hcom-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/hcom-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/hcom-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+AICLI_ULTIMATE_LSP=0 \
+AICLI_ULTIMATE_TARGETS=codex \
+SHELL=/bin/bash \
+  "$ROOT/install.sh" >/dev/null
+grep -qx 'hooks add codex' "$TMP/hcom.log"
+test -f "$TMP/hcom-home/.config/aicli-ultimate/hcom-hooks/codex"
+test -f "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-apollo-rust-best-practices"
+test -f "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
+HCOM_TEST_LOG="$TMP/hcom.log" \
+PATH="$TMP/hcom-bin:/usr/bin:/bin" \
+HOME="$TMP/hcom-home" \
+XDG_CONFIG_HOME="$TMP/hcom-home/.config" \
+CODEX_HOME="$TMP/hcom-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/hcom-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/hcom-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+  "$TMP/hcom-home/.local/share/aicli-ultimate/uninstall.sh" >/dev/null
+grep -qx 'hooks remove codex' "$TMP/hcom.log"
+test ! -e "$TMP/hcom-home/.config/aicli-ultimate/hcom-hooks/codex"
+test ! -e "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-apollo-rust-best-practices"
+test ! -e "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
+
+mkdir -p "$TMP/preinstalled-home"
+HCOM_TEST_LOG="$TMP/preinstalled.log" \
+CODEX_PREINSTALLED=1 \
+PATH="$TMP/hcom-bin:/usr/bin:/bin" \
+HOME="$TMP/preinstalled-home" \
+XDG_CONFIG_HOME="$TMP/preinstalled-home/.config" \
+CODEX_HOME="$TMP/preinstalled-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/preinstalled-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/preinstalled-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+AICLI_ULTIMATE_LSP=0 \
+AICLI_ULTIMATE_TARGETS=codex \
+SHELL=/bin/bash \
+  "$ROOT/install.sh" >/dev/null
+test ! -e "$TMP/preinstalled-home/.config/aicli-ultimate/native-plugins/codex-apollo-rust-best-practices"
+test ! -e "$TMP/preinstalled-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
+HCOM_TEST_LOG="$TMP/preinstalled.log" \
+CODEX_PREINSTALLED=1 \
+PATH="$TMP/hcom-bin:/usr/bin:/bin" \
+HOME="$TMP/preinstalled-home" \
+XDG_CONFIG_HOME="$TMP/preinstalled-home/.config" \
+CODEX_HOME="$TMP/preinstalled-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/preinstalled-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/preinstalled-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+  "$TMP/preinstalled-home/.local/share/aicli-ultimate/uninstall.sh" >/dev/null
+! grep -qx 'plugin remove apollo-rust-best-practices@aicli-ultimate' "$TMP/preinstalled.log"
+! grep -qx 'plugin marketplace remove aicli-ultimate' "$TMP/preinstalled.log"
 
 mkdir -p "$TMP/failure-bin" "$TMP/failure-home/.config/aicli-ultimate/native-plugins"
 printf '#!/bin/sh\nexit 1\n' >"$TMP/failure-bin/claude"

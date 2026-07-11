@@ -16,6 +16,7 @@ The installer detects installed CLIs and asks which ones to configure. Safe defa
 - Caveman and Ponytail modes;
 - native Caveman/Ponytail lifecycle plugins where each host supports them;
 - optional HCOM Orquestrator mode and a portable pure-delegation skill;
+- Apollo GraphQL's Rust best-practices skill across every selected CLI;
 - native skills and read-only planner, researcher, and reviewer agents where supported;
 - official Superpowers for Codex;
 - the CentauryAI workflow skill/plugin and conditional protected-branch Git hooks;
@@ -54,13 +55,15 @@ Codex and Antigravity CLI do not expose a native LSP client, so AI CLI Ultimate 
 
 ## Skills and plugins
 
-Codex skills are not custom slash commands. Invoke them as `$caveman`, `$ponytail`, `@caveman`, `@ponytail`, or naturally; `/caveman` is not expected in Codex's slash menu. Claude Code exposes personal skills as slash commands. OMP exposes `/skill:<name>`. OpenCode and Antigravity discover and invoke skills through their native skill systems.
+Codex skills are not custom slash commands. Invoke them as `$caveman`, `$ponytail`, `$rust-best-practices`, with `@name`, or naturally; `/caveman` is not expected in Codex's slash menu. Claude Code exposes personal skills as slash commands. OMP exposes `/skill:<name>`. OpenCode and Antigravity discover and invoke skills through their native skill systems.
 
 Bundled marketplace plugins:
 
 - `caveman`: concise, technically complete communication and review;
 - `ponytail`: YAGNI and smallest-correct-implementation engineering mode;
-- `centaury-workflow`: safe company branches, duplicate-work checks, validation, pull requests, and merge decisions.
+- `centaury-workflow`: safe company branches, duplicate-work checks, validation, pull requests, and merge decisions;
+- `orquestrator`: pure multi-agent delegation through HCOM;
+- `apollo-rust-best-practices`: Apollo GraphQL guidance for idiomatic Rust, ownership, errors, Clippy, performance, testing, and documentation.
 
 The installer can also add official Superpowers and Codex Security, plus optional frontend, Playwright, and React skills.
 
@@ -68,7 +71,7 @@ Claude plugins include their upstream `SessionStart`, `UserPromptSubmit`, and su
 
 ## HCOM Orquestrator
 
-The optional `orquestrator-hcom` skill delegates work through [hcom](https://github.com/CentauryAI/orquestrator-package), a multi-agent orchestration runtime. It enables pure delegation, threaded worker/reviewer coordination, event-driven monitoring, and CentauryAI-safe branch/PR rules. The installer does not install hcom itself — it must be installed separately through the orquestrator-package. HCOM hooks are managed by that package, not by AI CLI Ultimate.
+The optional `orquestrator-hcom` skill delegates work through [hcom](https://github.com/aannoo/hcom), a multi-agent orchestration runtime. It enables pure delegation, threaded worker/reviewer coordination, event-driven monitoring, and CentauryAI-safe branch/PR rules. When selected, AI CLI Ultimate installs a pinned, checksum-verified hcom release if missing and enables its hooks only for selected CLIs. Existing hooks are preserved; uninstall removes only hooks it added and leaves the shared hcom binary available for other tools.
 
 ## CentauryAI safety workflow
 
@@ -98,7 +101,7 @@ Codex Powerline dependencies: `tmux`, `jq`, `sqlite3`, `git`, Bash 3.2 or later,
 ```
 
 The uninstaller removes setup-owned plugins, wrappers, LSP bridge, shell block, OpenCode LSP settings, and conditional Git guard. Backups remain available and restoration is optional.
-HCOM hooks are managed by the orquestrator-package and must be removed through that package's uninstaller. Failed native-plugin removals keep their ownership markers so rerunning the uninstaller can retry safely.
+Failed HCOM-hook or native-plugin removals keep their ownership markers so rerunning the uninstaller can retry safely.
 
 ## Development
 

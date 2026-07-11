@@ -11,6 +11,10 @@ INSTALL_DIR="${AICLI_ULTIMATE_INSTALL_DIR:-$HOME/.local/share/aicli-ultimate}"
 BIN_DIR="${AICLI_ULTIMATE_BIN_DIR:-$HOME/.local/bin}"
 STATE_FILE="$CONFIG_HOME/install-state.json"
 MCPLS_VERSION="0.3.7"
+HCOM_VERSION="0.7.23"
+HCOM_INSTALLER_SHA256="5834dee99af05a039a259a81c43335913ec68920c627ead4cae638c652f649b2"
+HCOM_INSTALLER_URL="https://github.com/aannoo/hcom/releases/download/v$HCOM_VERSION/hcom-installer.sh"
+HCOM_BIN=""
 TEMP_DIR=""
 
 cleanup() {
@@ -59,6 +63,79 @@ install_codex_if_missing() {
   ask "Codex CLI is missing. Install @openai/codex with npm?" y || die "Codex CLI is required"
   command -v npm >/dev/null || die "npm is required to install Codex automatically"
   [[ "$DRY_RUN" == 1 ]] || npm install -g @openai/codex
+}
+
+install_hcom_if_missing() {
+  local installer candidate
+  if command -v hcom >/dev/null 2>&1; then
+    HCOM_BIN="$(command -v hcom)"
+    return 0
+  fi
+  [[ "$DRY_RUN" != 1 ]] || return 0
+  command -v curl >/dev/null 2>&1 || die "curl is required to install hcom"
+  installer="$(mktemp "${TMPDIR:-/tmp}/hcom-installer.XXXXXX")"
+  if ! curl -fsSL "$HCOM_INSTALLER_URL" -o "$installer"; then
+    rm -f "$installer"
+    die "failed to download the official hcom installer"
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s  %s\n' "$HCOM_INSTALLER_SHA256" "$installer" | sha256sum -c - >/dev/null \
+      || { rm -f "$installer"; die "hcom installer checksum verification failed"; }
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s  %s\n' "$HCOM_INSTALLER_SHA256" "$installer" | shasum -a 256 -c - >/dev/null \
+      || { rm -f "$installer"; die "hcom installer checksum verification failed"; }
+  else
+    rm -f "$installer"
+    die "no SHA-256 utility found; refusing to run the hcom installer"
+  fi
+  if ! sh "$installer"; then
+    rm -f "$installer"
+    die "failed to install hcom"
+  fi
+  rm -f "$installer"
+  for candidate in "$BIN_DIR/hcom" "$HOME/.local/bin/hcom" "$HOME/.cargo/bin/hcom"; do
+    if [[ -x "$candidate" ]]; then
+      HCOM_BIN="$candidate"
+      return 0
+    fi
+  done
+  command -v hcom >/dev/null 2>&1 && HCOM_BIN="$(command -v hcom)"
+  [[ -n "$HCOM_BIN" ]] || die "hcom installed, but its binary was not found"
+}
+
+hcom_hook_installed() {
+  local tool="$1"
+  "$HCOM_BIN" status --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    print(bool(json.load(sys.stdin).get("tools", {}).get(sys.argv[1], {}).get("hooks")))
+except (OSError, ValueError, TypeError):
+    print(False)
+' "$tool" | grep -qx True
+}
+
+configure_hcom() {
+  local tool enabled marker_dir="$CONFIG_HOME/hcom-hooks"
+  [[ "$ORQUESTRATOR" == 1 && "$DRY_RUN" != 1 ]] || return 0
+  install_hcom_if_missing
+  mkdir -p "$marker_dir"
+  for tool in codex claude opencode omp antigravity; do
+    case "$tool" in
+      codex) enabled="$TARGET_CODEX" ;;
+      claude) enabled="$TARGET_CLAUDE" ;;
+      opencode) enabled="$TARGET_OPENCODE" ;;
+      omp) enabled="$TARGET_OMP" ;;
+      antigravity) enabled="$TARGET_ANTIGRAVITY" ;;
+    esac
+    [[ "$enabled" == 1 ]] || continue
+    if hcom_hook_installed "$tool"; then
+      info "HCOM hooks already installed: $tool"
+    elif "$HCOM_BIN" hooks add "$tool"; then
+      touch "$marker_dir/$tool"
+    else
+      warn "Could not install HCOM hooks for $tool; use hcom start for ad-hoc mode."
+    fi
+  done
 }
 
 backup_file() {
@@ -259,6 +336,7 @@ install_owned_file() {
 copy_skill_set() {
   local target="$1"
   mkdir -p "$target"
+  copy_skill_source "$target" "$ROOT/plugins/apollo-rust-best-practices/skills"
   if [[ "$CAVEMAN" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/caveman/skills"; fi
   if [[ "$PONYTAIL" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/ponytail/skills"; fi
   if [[ "$CENTAURY" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/centaury-workflow/skills"; fi
@@ -275,6 +353,7 @@ backup_skill_source() {
 
 backup_skill_set() {
   local target="$1" backup="$2"
+  backup_skill_source "$target" "$backup" "$ROOT/plugins/apollo-rust-best-practices/skills"
   if [[ "$CAVEMAN" == 1 ]]; then backup_skill_source "$target" "$backup" "$ROOT/plugins/caveman/skills"; fi
   if [[ "$PONYTAIL" == 1 ]]; then backup_skill_source "$target" "$backup" "$ROOT/plugins/ponytail/skills"; fi
   if [[ "$CENTAURY" == 1 ]]; then backup_skill_source "$target" "$backup" "$ROOT/plugins/centaury-workflow/skills"; fi
@@ -411,7 +490,7 @@ configure_centaury_guard() {
 }
 
 install_plugin() {
-  local plugin="$1" required="${2:-1}" plugin_list
+  local plugin="$1" required="${2:-1}" ownership_marker="${3:-}" plugin_list
   plugin_list="$(codex plugin list 2>/dev/null || true)"
   if grep -Eq "^${plugin//./\.}[[:space:]]+installed" <<<"$plugin_list"; then
     info "Plugin already installed: $plugin"
@@ -420,6 +499,9 @@ install_plugin() {
       die "failed to install required plugin: $plugin"
     fi
     warn "Optional plugin unavailable: $plugin"
+  elif [[ -n "$ownership_marker" ]]; then
+    mkdir -p "$(dirname "$ownership_marker")"
+    touch "$ownership_marker"
   fi
 }
 
@@ -753,6 +835,7 @@ if [[ "$CENTAURY" == 1 ]]; then
 fi
 
 install_native_mode_plugins
+configure_hcom
 
 printf 'statusline=%s\nlsp=%s\ncaveman=%s\nponytail=%s\n' \
   "$([[ "$STATUSLINE" == 1 ]] && printf enabled || printf disabled)" \
@@ -786,14 +869,19 @@ if [[ "$STATUSLINE" == 1 && "$TARGET_ANTIGRAVITY" == 1 ]] && ! command -v jq >/d
 fi
 
 if [[ "$DRY_RUN" != 1 && "$TARGET_CODEX" == 1 ]]; then
+  codex_marker_dir="$CONFIG_HOME/native-plugins"
   marketplace_list="$(codex plugin marketplace list 2>/dev/null || true)"
   if ! awk '{print $1}' <<<"$marketplace_list" | grep -qx aicli-ultimate; then
     codex plugin marketplace add "$INSTALL_DIR"
+    mkdir -p "$codex_marker_dir"
+    touch "$codex_marker_dir/codex-marketplace-aicli-ultimate"
   fi
   if [[ "$CAVEMAN" == 1 ]]; then install_plugin caveman@aicli-ultimate; fi
   if [[ "$PONYTAIL" == 1 ]]; then install_plugin ponytail@aicli-ultimate; fi
   if [[ "$CENTAURY" == 1 ]]; then install_plugin centaury-workflow@aicli-ultimate; fi
   if [[ "$ORQUESTRATOR" == 1 ]]; then install_plugin orquestrator@aicli-ultimate; fi
+  install_plugin apollo-rust-best-practices@aicli-ultimate 1 \
+    "$codex_marker_dir/codex-apollo-rust-best-practices"
   if [[ "$SUPERPOWERS" == 1 ]]; then install_plugin superpowers@openai-curated 0; fi
   if [[ "$SECURITY" == 1 ]]; then install_plugin codex-security@openai-curated 0; fi
 fi
