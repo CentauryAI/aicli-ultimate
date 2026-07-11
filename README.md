@@ -13,6 +13,8 @@ The installer detects installed CLIs and asks which ones to configure. Safe defa
 - high-effort Codex configuration, memories, multi-agent support, goals, and plugins when Codex is selected;
 - native global English instructions for every selected CLI;
 - Caveman and Ponytail modes;
+- native Caveman/Ponytail lifecycle plugins where each host supports them;
+- optional Kore Orquestrator messaging hooks and a portable pure-delegation skill;
 - native skills and read-only planner, researcher, and reviewer agents where supported;
 - official Superpowers for Codex;
 - the CentauryAI workflow skill/plugin and conditional protected-branch Git hooks;
@@ -36,10 +38,10 @@ AICLI_ULTIMATE_TARGETS=codex,claude,opencode,omp,antigravity \
 | CLI | Global rules | Skills/plugins | Extra configuration |
 |---|---|---|---|
 | Codex | `~/.codex/AGENTS.md` | bundled Codex marketplace | profile, agents, Midnight Blue, Powerline |
-| Claude Code | `~/.claude/CLAUDE.md` | `~/.claude/skills` | subagents, native three-row Powerline |
-| OpenCode | `~/.config/opencode/AGENTS.md` | shared `~/.agents/skills` | subagents, Tokyo Night, native TUI plugin |
-| OMP | `~/AGENTS.md` | shared `~/.agents/skills` | native full Powerline plus footer hook |
-| Antigravity CLI | global plugin rule | global plugin skills | global plugin and native command statusline |
+| Claude Code | `~/.claude/CLAUDE.md` | personal skills + official Caveman/Ponytail plugins | lifecycle hooks, subagents, native three-row Powerline |
+| OpenCode | `~/.config/opencode/AGENTS.md` | shared skills + Ponytail server plugin | mode commands/injection, subagents, Tokyo Night, native TUI plugin |
+| OMP | `~/AGENTS.md` | shared skills + Ponytail Pi plugin | mode commands/injection, native full Powerline plus footer hook |
+| Antigravity CLI | global plugin rule | aggregate skills + official Caveman/Ponytail plugins | native extensions and command statusline |
 
 Managed instruction blocks and JSON path updates preserve unrelated content. Existing statusline settings are backed up and restored by the uninstaller. Files and skill directories owned by another setup are never replaced.
 
@@ -54,6 +56,14 @@ Bundled marketplace plugins:
 - `centaury-workflow`: safe company branches, duplicate-work checks, validation, pull requests, and merge decisions.
 
 The installer can also add official Superpowers and Codex Security, plus optional frontend, Playwright, and React skills.
+
+Claude plugins include their upstream `SessionStart`, `UserPromptSubmit`, and subagent hooks. OpenCode and OMP use Ponytail's official host adapters. Caveman has no upstream OpenCode or OMP lifecycle plugin, so those hosts use the same global always-on rule and portable skills instead of a fake compatibility layer. Existing native plugins are detected and preserved; uninstall removes or disables only integrations enabled by AI CLI Ultimate.
+
+## Kore Orquestrator
+
+The optional `orquestrator-hcom` skill modernizes the local `orquestrator-package` workflow for [Kore](https://github.com/Solar2004/kore). The installer installs Kore when missing and adds its native hooks only for selected, supported CLIs. OMP has no native Kore hook and uses `kore listen`.
+
+Invoke the skill through each host's native skill syntax. It enables pure delegation, threaded worker/reviewer coordination, event-driven monitoring, and CentauryAI-safe branch/PR rules. It does not run `/home/artorias/Projectos/orquestrator-package/install.sh`: that path is machine-specific, Claude-only, and overwrites existing commands.
 
 ## CentauryAI safety workflow
 
@@ -83,6 +93,7 @@ Codex Powerline dependencies: `tmux`, `jq`, `sqlite3`, `git`, Bash 3.2 or later,
 ```
 
 The uninstaller removes setup-owned plugins, wrappers, shell block, and conditional Git guard. Backups remain available and restoration is optional.
+Kore is a shared runtime and remains installed; only hooks added by AI CLI Ultimate are removed. Failed native-plugin removals keep their ownership markers so rerunning the uninstaller can retry safely.
 
 ## Development
 

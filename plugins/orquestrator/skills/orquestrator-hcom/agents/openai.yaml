@@ -1,0 +1,4 @@
+interface:
+  display_name: "Kore Orquestrator"
+  short_description: "Coordinate coding agents through Kore"
+  default_prompt: "Use $orquestrator-hcom to coordinate agents through Kore without coding directly."
