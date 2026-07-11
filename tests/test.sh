@@ -58,6 +58,8 @@ printf 'statusline=enabled\n' >"$TMP/wrapper-home/.config/aicli-ultimate/modes"
 : >"$TMP/wrapper-home/.config/aicli-ultimate/tmux.conf"
 printf '%s\n' \
   '#!/bin/sh' \
+  'if [ -n "${CODEX_HCOM_LOG:-}" ] && [ -z "${CODEX_HCOM_CHILD:-}" ]; then exec hcom codex; fi' \
+  'if [ -n "${CODEX_PATH_LOG:-}" ]; then command -v codex >"$CODEX_PATH_LOG"; fi' \
   'printf "%s\n" "$0" "$@" >"$CODEX_ARGS_LOG"' >"$TMP/wrapper-real-bin/codex"
 printf '%s\n' \
   '#!/bin/bash' \
@@ -99,6 +101,34 @@ XDG_CONFIG_HOME="$TMP/wrapper-home/.config" \
 CODEX_ARGS_LOG="$TMP/codex-args.log" \
 PATH="$wrapper_path" \
   "$TMP/wrapper-bin/aicli-ultimate" --version
+grep -Fqx "$TMP/wrapper-real-bin/codex" "$TMP/codex-args.log"
+grep -qx -- '--version' "$TMP/codex-args.log"
+
+# The wrapper propagates its shim path so nested HCOM launches resolve it too.
+HOME="$TMP/wrapper-home" \
+XDG_CONFIG_HOME="$TMP/wrapper-home/.config" \
+CODEX_ARGS_LOG="$TMP/codex-args.log" \
+CODEX_PATH_LOG="$TMP/codex-path.log" \
+PATH="$TMP/wrapper-real-bin:$TMP/wrapper-bin:/usr/bin:/bin" \
+  "$TMP/wrapper-bin/aicli-ultimate" --version
+grep -Fqx "$TMP/wrapper-home/.config/aicli-ultimate/codex-bin/codex" \
+  "$TMP/codex-path.log"
+
+printf '%s\n' \
+  '#!/bin/sh' \
+  'tool_dir="$(dirname "$(command -v codex)")"' \
+  'command -v codex >"$CODEX_HCOM_LOG"' \
+  'PATH="$tool_dir:$PATH" CODEX_HCOM_CHILD=1 exec codex --version' \
+  >"$TMP/wrapper-bin/hcom"
+chmod +x "$TMP/wrapper-bin/hcom"
+HOME="$TMP/wrapper-home" \
+XDG_CONFIG_HOME="$TMP/wrapper-home/.config" \
+CODEX_ARGS_LOG="$TMP/codex-args.log" \
+CODEX_HCOM_LOG="$TMP/hcom-codex.log" \
+PATH="$TMP/wrapper-real-bin:$TMP/wrapper-bin:/usr/bin:/bin" \
+  "$TMP/wrapper-bin/aicli-ultimate" --version
+grep -Fqx "$TMP/wrapper-home/.config/aicli-ultimate/codex-bin/codex" \
+  "$TMP/hcom-codex.log"
 grep -Fqx "$TMP/wrapper-real-bin/codex" "$TMP/codex-args.log"
 grep -qx -- '--version' "$TMP/codex-args.log"
 

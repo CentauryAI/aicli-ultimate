@@ -24,6 +24,8 @@ resolve_real_codex() {
 }
 
 real_codex="$(resolve_real_codex)"
+codex_shim_dir="$(dirname "$codex_shim")"
+[[ ":$PATH:" == *":$codex_shim_dir:"* ]] || export PATH="$codex_shim_dir:$PATH"
 
 doctor() {
   local value missing=()
