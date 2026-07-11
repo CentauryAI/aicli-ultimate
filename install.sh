@@ -819,6 +819,9 @@ else
   SECURITY=0
 fi
 
+# The "Optional skills" step only runs when selected outside dry-run.
+[[ "$DRY_RUN" != 1 ]] && (( FRONTEND + PLAYWRIGHT + REACT > 0 )) || STEP_TOTAL=7
+
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup="$CONFIG_HOME/backups/$timestamp"
 mkdir -p "$backup"
