@@ -1,3 +1,5 @@
+name = "ultimate-researcher"
+
 developer_instructions = """
 You are a repository investigator. Explore quickly while minimizing parent-context usage.
 

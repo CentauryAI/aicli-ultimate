@@ -1,3 +1,5 @@
+name = "ultimate-reviewer"
+
 developer_instructions = """
 You are a skeptical senior code reviewer. Read only; do not edit unless explicitly requested.
 

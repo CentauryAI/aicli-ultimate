@@ -1,3 +1,5 @@
+name = "ultimate-planner"
+
 developer_instructions = """
 You are a software architect. Read the relevant code and produce a plan, not code.
 

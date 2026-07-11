@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+wrapper="$(basename "$0")"
+config_root="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
+mode_file="$config_root/modes"
+
+case "$wrapper" in
+  aicli-opencode)
+    agent=opencode
+    real_bin="${AICLI_OPENCODE_REAL_BIN:-$(command -v opencode || true)}"
+    ;;
+  aicli-omp)
+    agent=omp
+    real_bin="${AICLI_OMP_REAL_BIN:-$(command -v omp || true)}"
+    ;;
+  aicli-agy)
+    agent=agy
+    real_bin="${AICLI_AGY_REAL_BIN:-$(command -v agy || true)}"
+    ;;
+  *)
+    printf 'Unknown AI CLI Ultimate wrapper: %s\n' "$wrapper" >&2
+    exit 1
+    ;;
+esac
+
+if [[ -z "$real_bin" || ! -x "$real_bin" ]]; then
+  printf '%s CLI not found. Install it before using %s.\n' "$agent" "$wrapper" >&2
+  exit 1
+fi
+
+direct=0
+case "$agent:${1:-}" in
+  opencode:run|opencode:acp|opencode:mcp|opencode:debug|opencode:providers|opencode:agent|opencode:upgrade|opencode:uninstall|opencode:serve|opencode:web|opencode:models|opencode:stats|opencode:export|opencode:import|opencode:github|opencode:pr|opencode:session|opencode:plugin|opencode:completion)
+    direct=1 ;;
+  omp:acp|omp:agents|omp:auth-broker|omp:auth-gateway|omp:bench|omp:commit|omp:completions|omp:config|omp:dry-balance|omp:gallery|omp:gc|omp:grep|omp:grievances|omp:install|omp:models|omp:plugin|omp:read|omp:say|omp:search|omp:setup|omp:shell|omp:ssh|omp:stats|omp:tiny-models|omp:token|omp:ttsr|omp:update|omp:usage|omp:worktree)
+    direct=1 ;;
+  agy:agent|agy:agents|agy:changelog|agy:help|agy:install|agy:models|agy:plugin|agy:plugins|agy:update)
+    direct=1 ;;
+  *:-h|*:--help|*:-v|*:--version)
+    direct=1 ;;
+esac
+
+if [[ "$agent" == agy ]]; then
+  for argument in "$@"; do
+    case "$argument" in
+      -p|--print|--prompt) direct=1; break ;;
+    esac
+  done
+fi
+
+statusline="$(sed -n 's/^statusline=//p' "$mode_file" 2>/dev/null | head -1)"
+if [[ "$direct" == 1 || "$statusline" != enabled || ! -t 0 || ! -t 1 ]] \
+  || ! command -v tmux >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
+  exec "$real_bin" "$@"
+fi
+
+tmux_config="$config_root/tmux-$agent.conf"
+session="aicli-$agent-$$"
+printf -v command '%q ' "$real_bin" "$@"
+exec env TMUX= tmux -L "$session" -f "$tmux_config" \
+  new-session -s "$session" -c "$PWD" "$command"

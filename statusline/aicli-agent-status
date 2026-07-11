@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -u
+
+line="${1:-1}"
+agent="${2:-agent}"
+pane="${3:-${TMUX_PANE:-}}"
+base="#1a1b26"
+cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/aicli-ultimate"
+config_root="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
+mkdir -p "$cache_root"
+pane_key="${pane//[^a-zA-Z0-9]/_}"
+cache="$cache_root/status-${agent}-${pane_key:-default}"
+lock_dir="$cache.lock"
+
+safe() {
+  local value="${1//$'\n'/ }"
+  value="${value//$'\r'/ }"
+  value="${value//#/##}"
+  printf '%s' "$value"
+}
+
+uppercase() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+
+mtime() {
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || printf 0
+}
+
+powerline() {
+  local first=1 previous="" color fg value
+  while (( $# >= 3 )); do
+    color="$1"; fg="$2"; value="$3"; shift 3
+    if (( first )); then
+      printf '#[fg=%s,bg=%s]' "$color" "$base"
+      first=0
+    else
+      printf '#[fg=%s,bg=%s]' "$previous" "$color"
+    fi
+    printf '#[fg=%s,bg=%s,bold] %s #[nobold]' "$fg" "$color" "$(safe "$value")"
+    previous="$color"
+  done
+  (( first )) || printf '#[fg=%s,bg=%s]#[default]' "$previous" "$base"
+}
+
+elapsed() {
+  local seconds="$1"
+  printf '%02d:%02d:%02d' "$((seconds / 3600))" "$(((seconds % 3600) / 60))" "$((seconds % 60))"
+}
+
+generate() {
+  local cwd branch changes cwd_short head now started caveman ponytail agent_name
+  cwd="$PWD"
+  if [[ -n "$pane" ]]; then
+    cwd="$(tmux display-message -p -t "$pane" '#{pane_current_path}' 2>/dev/null || printf '%s' "$PWD")"
+  fi
+  branch="$(git -C "$cwd" branch --show-current 2>/dev/null || true)"
+  [[ -n "$branch" ]] || branch="no-git"
+  changes="$(git -C "$cwd" status --porcelain --untracked-files=normal 2>/dev/null | wc -l | tr -d ' ')"
+  head="$(git -C "$cwd" rev-parse --short HEAD 2>/dev/null || printf '%s' '-------')"
+  [[ "$cwd" == "$HOME"* ]] && cwd_short="~${cwd#$HOME}" || cwd_short="$cwd"
+  now="$(date +%s)"
+  started="$(tmux display-message -p -t "$pane" '#{session_created}' 2>/dev/null || printf '%s' "$now")"
+  caveman="$(sed -n 's/^caveman=//p' "$config_root/modes" 2>/dev/null | head -1 | tr -cd 'a-zA-Z0-9-' || true)"
+  ponytail="$(sed -n 's/^ponytail=//p' "$config_root/modes" 2>/dev/null | head -1 | tr -cd 'a-zA-Z0-9-' || true)"
+  agent_name="$(uppercase "$agent")"
+
+  powerline '#7aa2f7' '#1a1b26' "◆ $agent_name" '#3d59a1' '#c0caf5' "󰉋 $cwd_short" '#2ac3de' '#1a1b26' " $branch  Δ$changes"
+  printf '\n'
+  powerline '#bb9af7' '#1a1b26' "SESSION $(elapsed "$((now - started))")" '#7dcfff' '#1a1b26' "HEAD $head" '#565f89' '#c0caf5' "CLOCK $(date +'%H:%M:%S')"
+  printf '\n'
+  if [[ -n "$caveman" && -n "$ponytail" ]]; then
+    powerline '#e0af68' '#1a1b26' "CAVEMAN:$(uppercase "$caveman")" '#9ece6a' '#1a1b26' "PONYTAIL:$(uppercase "$ponytail")" '#f7768e' '#1a1b26' 'REFRESH 10s'
+  elif [[ -n "$caveman" ]]; then
+    powerline '#e0af68' '#1a1b26' "CAVEMAN:$(uppercase "$caveman")" '#f7768e' '#1a1b26' 'REFRESH 10s'
+  elif [[ -n "$ponytail" ]]; then
+    powerline '#9ece6a' '#1a1b26' "PONYTAIL:$(uppercase "$ponytail")" '#f7768e' '#1a1b26' 'REFRESH 10s'
+  else
+    powerline '#e0af68' '#1a1b26' 'AI CLI ULTIMATE' '#f7768e' '#1a1b26' 'REFRESH 10s'
+  fi
+  printf '\n'
+}
+
+now=$(date +%s)
+modified=$(mtime "$cache")
+if (( now - modified >= 10 )); then
+  if mkdir "$lock_dir" 2>/dev/null; then
+    tmp="$cache.tmp.$$"
+    generate >"$tmp"
+    mv "$tmp" "$cache"
+    rmdir "$lock_dir" 2>/dev/null || true
+  elif [[ ! -r "$cache" ]]; then
+    generate >"$cache"
+  fi
+fi
+sed -n "${line}p" "$cache"

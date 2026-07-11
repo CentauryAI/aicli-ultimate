@@ -2,13 +2,109 @@
 set -u
 
 payload="$(cat)"
-model="$(jq -r '.model.display_name // .model.id // "Claude"' <<<"$payload" 2>/dev/null || printf Claude)"
-directory="$(jq -r '.workspace.current_dir // .cwd // ""' <<<"$payload" 2>/dev/null || true)"
-used="$(jq -r '.context_window.used_percentage // 0 | floor' <<<"$payload" 2>/dev/null || printf 0)"
-branch="$(git -C "${directory:-$PWD}" branch --show-current 2>/dev/null || true)"
-directory="${directory:-$PWD}"
-[[ "$directory" == "$HOME"* ]] && directory="~${directory#$HOME}"
-[[ -n "$branch" ]] || branch="no-git"
+config_root="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
+base="#1a1b26"
 
-printf '\033[38;2;122;162;247m\033[48;2;122;162;247m\033[38;2;26;27;38m ◆ %s \033[48;2;61;89;161m\033[38;2;122;162;247m\033[38;2;192;202;245m 󰉋 %s \033[48;2;42;195;222m\033[38;2;61;89;161m\033[38;2;26;27;38m  %s \033[48;2;187;154;247m\033[38;2;42;195;222m\033[38;2;26;27;38m CTX %s%% \033[49m\033[38;2;187;154;247m\033[0m\n' \
-  "$model" "$directory" "$branch" "$used"
+json() { jq -r "$1" <<<"$payload" 2>/dev/null || printf '%s' "${2:-}"; }
+
+safe() {
+  local value="${1//$'\n'/ }"
+  value="${value//$'\r'/ }"
+  printf '%s' "$value" | tr -d '\000-\010\013\014\016-\037\177'
+}
+
+uppercase() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+
+compact_number() {
+  awk -v n="${1:-0}" 'BEGIN {
+    if (n >= 1000000) printf "%.1fM", n / 1000000;
+    else if (n >= 1000) printf "%.1fk", n / 1000;
+    else printf "%d", n;
+  }'
+}
+
+bar() {
+  local pct="${1:-0}" width="${2:-10}" full empty i
+  (( pct < 0 )) && pct=0
+  (( pct > 100 )) && pct=100
+  full=$((pct * width / 100)); empty=$((width - full))
+  for ((i=0; i<full; i++)); do printf '█'; done
+  for ((i=0; i<empty; i++)); do printf '░'; done
+}
+
+rgb() {
+  local color="${1#\#}"
+  printf '%d;%d;%d' "$((16#${color:0:2}))" "$((16#${color:2:2}))" "$((16#${color:4:2}))"
+}
+
+powerline() {
+  local first=1 previous="" color fg value
+  if [[ -n "${NO_COLOR:-}" ]]; then
+    while (( $# >= 3 )); do
+      value="$3"; shift 3
+      (( first )) || printf ' | '
+      printf '%s' "$(safe "$value")"
+      first=0
+    done
+    return
+  fi
+  while (( $# >= 3 )); do
+    color="$1"; fg="$2"; value="$3"; shift 3
+    if (( first )); then
+      printf '\033[38;2;%sm\033[48;2;%sm' "$(rgb "$color")" "$(rgb "$base")"
+      first=0
+    else
+      printf '\033[38;2;%sm\033[48;2;%sm' "$(rgb "$previous")" "$(rgb "$color")"
+    fi
+    printf '\033[38;2;%sm\033[48;2;%sm\033[1m %s \033[22m' "$(rgb "$fg")" "$(rgb "$color")" "$(safe "$value")"
+    previous="$color"
+  done
+  (( first )) || printf '\033[38;2;%sm\033[48;2;%sm\033[0m' "$(rgb "$previous")" "$(rgb "$base")"
+}
+
+epoch_time() {
+  local epoch="$1" format="$2"
+  [[ "$epoch" =~ ^[0-9]+([.][0-9]+)?$ ]] || { printf '%s' '--:--'; return; }
+  epoch="${epoch%.*}"
+  [[ "$epoch" != 0 ]] || { printf '%s' '--:--'; return; }
+  date -d "@$epoch" "+$format" 2>/dev/null \
+    || date -r "$epoch" "+$format" 2>/dev/null \
+    || printf '%s' '--:--'
+}
+
+model="$(json '.model.display_name // .model.id // "Claude"' Claude)"
+cwd="$(json '.workspace.current_dir // .cwd // ""' '')"
+cwd="${cwd:-$PWD}"
+branch="$(git -C "$cwd" branch --show-current 2>/dev/null || true)"
+[[ -n "$branch" ]] || branch=no-git
+changes="$(git -C "$cwd" status --porcelain --untracked-files=normal 2>/dev/null | wc -l | tr -d ' ')"
+[[ "$cwd" == "$HOME"* ]] && cwd_short="~${cwd#$HOME}" || cwd_short="$cwd"
+
+ctx_pct="$(json '(.context_window.used_percentage // 0) | floor' 0)"
+input="$(json '.context_window.total_input_tokens // .context_window.current_usage.input_tokens // 0' 0)"
+output="$(json '.context_window.total_output_tokens // .context_window.current_usage.output_tokens // 0' 0)"
+cached="$(json '.context_window.current_usage.cache_read_input_tokens // .context_window.cache_read_input_tokens // 0' 0)"
+cost="$(json '(.cost.total_cost_usd // .total_cost_usd // 0) | tostring' 0)"
+primary="$(json '(.rate_limits.five_hour.used_percentage // .rate_limits.primary.used_percentage // 0) | floor' 0)"
+weekly="$(json '(.rate_limits.seven_day.used_percentage // .rate_limits.weekly.used_percentage // .rate_limits.secondary.used_percentage // 0) | floor' 0)"
+reset5="$(json '.rate_limits.five_hour.resets_at // .rate_limits.primary.resets_at // 0' 0)"
+reset7="$(json '.rate_limits.seven_day.resets_at // .rate_limits.weekly.resets_at // .rate_limits.secondary.resets_at // 0' 0)"
+reset5="$(epoch_time "$reset5" '%H:%M')"
+reset7="$(epoch_time "$reset7" '%a %H:%M')"
+caveman="$(sed -n 's/^caveman=//p' "$config_root/modes" 2>/dev/null | head -1 | tr -cd 'a-zA-Z0-9-' || true)"
+ponytail="$(sed -n 's/^ponytail=//p' "$config_root/modes" 2>/dev/null | head -1 | tr -cd 'a-zA-Z0-9-' || true)"
+
+if [[ -n "$caveman" && -n "$ponytail" ]]; then
+  powerline '#7aa2f7' '#1a1b26' "◆ $model" '#3d59a1' '#c0caf5' "󰉋 $cwd_short" '#2ac3de' '#1a1b26' " $branch  Δ$changes" '#e0af68' '#1a1b26' "CAVEMAN:$(uppercase "$caveman")" '#9ece6a' '#1a1b26' "PONYTAIL:$(uppercase "$ponytail")"
+elif [[ -n "$caveman" ]]; then
+  powerline '#7aa2f7' '#1a1b26' "◆ $model" '#3d59a1' '#c0caf5' "󰉋 $cwd_short" '#2ac3de' '#1a1b26' " $branch  Δ$changes" '#e0af68' '#1a1b26' "CAVEMAN:$(uppercase "$caveman")"
+elif [[ -n "$ponytail" ]]; then
+  powerline '#7aa2f7' '#1a1b26' "◆ $model" '#3d59a1' '#c0caf5' "󰉋 $cwd_short" '#2ac3de' '#1a1b26' " $branch  Δ$changes" '#9ece6a' '#1a1b26' "PONYTAIL:$(uppercase "$ponytail")"
+else
+  powerline '#7aa2f7' '#1a1b26' "◆ $model" '#3d59a1' '#c0caf5' "󰉋 $cwd_short" '#2ac3de' '#1a1b26' " $branch  Δ$changes"
+fi
+printf '\n'
+powerline '#bb9af7' '#1a1b26' "CTX $(bar "$ctx_pct") ${ctx_pct}%" '#7dcfff' '#1a1b26' "IN $(compact_number "$input")" '#7aa2f7' '#1a1b26' "OUT $(compact_number "$output")" '#565f89' '#c0caf5' "CACHE $(compact_number "$cached")" '#9ece6a' '#1a1b26' "COST \$$cost"
+printf '\n'
+powerline '#e0af68' '#1a1b26' "5H $(bar "$primary" 8) ${primary}% ↻$reset5" '#f7768e' '#1a1b26' "7D $(bar "$weekly" 8) ${weekly}% ↻$reset7"
+printf '\n'

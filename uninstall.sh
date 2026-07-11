@@ -93,6 +93,9 @@ if command -v codex >/dev/null 2>&1; then
   codex plugin remove centaury-workflow@aicli-ultimate 2>/dev/null || true
   codex plugin marketplace remove aicli-ultimate 2>/dev/null || true
 fi
+if command -v agy >/dev/null 2>&1; then
+  agy plugin uninstall aicli-ultimate >/dev/null 2>&1 || true
+fi
 
 remove_shell_block
 remove_managed_block "$CODEX_HOME/AGENTS.md"
@@ -101,10 +104,14 @@ remove_managed_block "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/AGENTS.md"
 remove_managed_block "$HOME/AGENTS.md"
 
 if [[ -f "$INSTALL_DIR/scripts/json_remove.py" ]]; then
-  python3 "$INSTALL_DIR/scripts/json_remove.py" "$HOME/.claude/settings.json" statusLine \
-    "{\"type\":\"command\",\"command\":\"$BIN_DIR/claude-ultimate-status\"}"
   python3 "$INSTALL_DIR/scripts/json_remove.py" \
     "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/tui.json" theme '"tokyonight"'
+fi
+
+if [[ -f "$INSTALL_DIR/scripts/json_override.py" ]]; then
+  claude_status_json="$(python3 -c 'import json,sys; print(json.dumps({"type":"command","command":sys.argv[1]}))' "$BIN_DIR/claude-ultimate-status")"
+  python3 "$INSTALL_DIR/scripts/json_override.py" restore "$HOME/.claude/settings.json" statusLine \
+    "$claude_status_json" "$CONFIG_HOME/claude-statusline-previous.json"
 fi
 
 remove_skill_set "$HOME/.claude/skills"
@@ -134,6 +141,10 @@ fi
 remove_generated_file "$BIN_DIR/aicli-ultimate" "$INSTALL_DIR/statusline/codex-powerline"
 remove_generated_file "$BIN_DIR/aicli-ultimate-status" "$INSTALL_DIR/statusline/codex-powerline-status"
 remove_generated_file "$BIN_DIR/claude-ultimate-status" "$INSTALL_DIR/statusline/claude-powerline-status"
+remove_generated_file "$BIN_DIR/aicli-agent-status" "$INSTALL_DIR/statusline/aicli-agent-status"
+remove_generated_file "$BIN_DIR/aicli-opencode" "$INSTALL_DIR/statusline/aicli-agent-powerline"
+remove_generated_file "$BIN_DIR/aicli-omp" "$INSTALL_DIR/statusline/aicli-agent-powerline"
+remove_generated_file "$BIN_DIR/aicli-agy" "$INSTALL_DIR/statusline/aicli-agent-powerline"
 
 backup=""
 if [[ -r "$CONFIG_HOME/install-state.json" ]]; then
@@ -154,6 +165,8 @@ fi
 rm -rf "$INSTALL_DIR"
 rm -rf "$CONFIG_HOME/git-hooks"
 rm -f "$CONFIG_HOME/centaury.gitconfig" "$CONFIG_HOME/modes" "$CONFIG_HOME/tmux.conf" \
-  "$CONFIG_HOME/profile-state.json" "$CONFIG_HOME/install-state.json"
+  "$CONFIG_HOME/tmux-opencode.conf" "$CONFIG_HOME/tmux-omp.conf" "$CONFIG_HOME/tmux-agy.conf" \
+  "$CONFIG_HOME/claude-statusline-previous.json" "$CONFIG_HOME/profile-state.json" \
+  "$CONFIG_HOME/install-state.json"
 
 printf 'AI CLI Ultimate removed. Backups were preserved in %s/backups.\n' "$CONFIG_HOME"
