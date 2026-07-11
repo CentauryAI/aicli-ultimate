@@ -338,6 +338,7 @@ rm -f "$CONFIG_HOME/centaury.gitconfig" "$CONFIG_HOME/modes" "$CONFIG_HOME/tmux.
   "$CONFIG_HOME/claude-statusline-previous.json" "$CONFIG_HOME/profile-state.json" \
   "$CONFIG_HOME/antigravity-statusline-previous.json" "$CONFIG_HOME/omp-statusline-owned" \
   "$CONFIG_HOME/opencode-ponytail-owned" \
+  "$CONFIG_HOME/manifest.txt" "$CONFIG_HOME/manifest.txt.new" \
   "$CONFIG_HOME/install-state.json"
 
 printf 'AI CLI Ultimate removed. Backups were preserved in %s/backups.\n' "$CONFIG_HOME"

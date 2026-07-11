@@ -35,7 +35,9 @@ AICLI_ULTIMATE_TARGETS=codex,claude,opencode,omp,antigravity \
   curl -fsSL https://raw.githubusercontent.com/CentauryAI/aicli-ultimate/main/install.sh | bash
 ```
 
-`AICLI_ULTIMATE_TARGETS` accepts any comma-separated subset of `codex`, `claude`, `opencode`, `omp`, and `antigravity`. Other optional variables include `AICLI_ULTIMATE_LSP=0|1`, `AICLI_ULTIMATE_EFFORT`, `CODEX_HOME`, `AICLI_ULTIMATE_REF`, `AICLI_ULTIMATE_INSTALL_DIR`, and `AICLI_ULTIMATE_BIN_DIR`.
+`AICLI_ULTIMATE_TARGETS` accepts any comma-separated subset of `codex`, `claude`, `opencode`, `omp`, and `antigravity`. Other optional variables include `AICLI_ULTIMATE_LSP=0|1`, `AICLI_ULTIMATE_EFFORT`, `CODEX_HOME`, `AICLI_ULTIMATE_REF`, `AICLI_ULTIMATE_INSTALL_DIR`, and `AICLI_ULTIMATE_BIN_DIR`. `AICLI_ULTIMATE_DRY_RUN=1` prints the selection plan and exits without changing anything.
+
+When `whiptail` is available, the installer shows a single checklist screen instead of sequential prompts. Re-running the installer upgrades in place: it reports the previous release, overwrites only files it owns, and removes owned files a newer release no longer ships (after backing them up).
 
 ## Native adapters
 
@@ -69,7 +71,7 @@ Bundled marketplace plugins:
 - `orquestrator`: pure multi-agent delegation through HCOM;
 - `apollo-rust-best-practices`: Apollo GraphQL guidance for idiomatic Rust, ownership, errors, Clippy, performance, testing, and documentation.
 
-The installer can also add official Superpowers and Codex Security, plus optional skills: frontend, Playwright, React, web-app testing (Anthropic), MCP builder (Anthropic), grill-with-docs plan grilling with ADR docs, and security best practices (OpenAI). Optional skills install only into the CLIs selected for this setup.
+The installer can also add official Superpowers and Codex Security, plus optional skills: frontend, Playwright, React, web-app testing (Anthropic), MCP builder (Anthropic), grill-with-docs plan grilling with ADR docs, security best practices (OpenAI), differential security review (Trail of Bits), and a GitHub Actions fixer (OpenAI). Optional skills install only into the CLIs selected for this setup.
 
 Claude plugins include their upstream `SessionStart`, `UserPromptSubmit`, and subagent hooks. OpenCode and OMP use Ponytail's official host adapters. Caveman has no upstream OpenCode or OMP lifecycle plugin, so those hosts use the same global always-on rule and portable skills instead of a fake compatibility layer. Existing native plugins are detected and preserved; uninstall removes or disables only integrations enabled by AI CLI Ultimate.
 

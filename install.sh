@@ -4,6 +4,7 @@ set -euo pipefail
 REPO_SLUG="${AICLI_ULTIMATE_REPO:-CentauryAI/aicli-ultimate}"
 REF="${AICLI_ULTIMATE_REF:-main}"
 NONINTERACTIVE="${AICLI_ULTIMATE_NONINTERACTIVE:-0}"
+OFFLINE="${AICLI_ULTIMATE_OFFLINE:-0}"
 DRY_RUN="${AICLI_ULTIMATE_DRY_RUN:-0}"
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
@@ -69,6 +70,93 @@ ask() {
   fi
 }
 
+run_tui() {
+  local choices d_claude=OFF d_opencode=OFF d_omp=OFF d_agy=OFF
+  command -v claude >/dev/null 2>&1 && d_claude=ON
+  command -v opencode >/dev/null 2>&1 && d_opencode=ON
+  command -v omp >/dev/null 2>&1 && d_omp=ON
+  command -v agy >/dev/null 2>&1 && d_agy=ON
+  choices="$(whiptail --title "AI CLI Ultimate" --separate-output --checklist \
+    "Space toggles, arrows move, Enter confirms." 30 74 20 \
+    codex "Configure Codex" ON \
+    claude "Configure Claude Code" "$d_claude" \
+    opencode "Configure OpenCode" "$d_opencode" \
+    omp "Configure OMP (Oh My Pi)" "$d_omp" \
+    antigravity "Configure Antigravity CLI (agy)" "$d_agy" \
+    statusline "Powerline statuslines" ON \
+    lsp "LSP support (Rust, TS/JS, Python, GitHub Markdown)" ON \
+    caveman "Caveman plugin" ON \
+    caveman-always "Keep Caveman active by default" ON \
+    ponytail "Ponytail plugin" ON \
+    ponytail-always "Keep Ponytail active by default" ON \
+    orquestrator "HCOM Orquestrator mode" ON \
+    superpowers "Official Superpowers plugin (Codex)" ON \
+    centaury "CentauryAI protected-branch workflow" ON \
+    completions "Shell completions" ON \
+    security "Official Codex Security plugin (Codex)" OFF \
+    frontend "Optional frontend skills" OFF \
+    playwright "Optional Playwright testing skill" OFF \
+    react "Optional React best-practices skill" OFF \
+    webapp "Optional web-app testing skill (Anthropic)" OFF \
+    mcp-builder "Optional MCP builder skill (Anthropic)" OFF \
+    grill-with-docs "Optional plan-grilling skill with ADR docs" OFF \
+    security-bp "Optional security best-practices skill (OpenAI)" OFF \
+    diff-review "Optional differential security review skill (Trail of Bits)" OFF \
+    gh-fix-ci "Optional GitHub Actions fixer skill (OpenAI)" OFF \
+    </dev/tty 3>&1 1>&2 2>&3)" || return 1
+  TARGET_CODEX=0 TARGET_CLAUDE=0 TARGET_OPENCODE=0 TARGET_OMP=0 TARGET_ANTIGRAVITY=0
+  STATUSLINE=0 LSP=0 CAVEMAN=0 CAVEMAN_ALWAYS=0 PONYTAIL=0 PONYTAIL_ALWAYS=0
+  ORQUESTRATOR=0 SUPERPOWERS=0 CENTAURY=0 COMPLETIONS=0 SECURITY=0
+  FRONTEND=0 PLAYWRIGHT=0 REACT=0 WEBAPP=0 MCPBUILDER=0 GRILLDOCS=0 SECBP=0
+  DIFFREVIEW=0 GHFIXCI=0
+  local tag
+  while IFS= read -r tag; do
+    case "$tag" in
+      codex) TARGET_CODEX=1 ;;
+      claude) TARGET_CLAUDE=1 ;;
+      opencode) TARGET_OPENCODE=1 ;;
+      omp) TARGET_OMP=1 ;;
+      antigravity) TARGET_ANTIGRAVITY=1 ;;
+      statusline) STATUSLINE=1 ;;
+      lsp) LSP=1 ;;
+      caveman) CAVEMAN=1 ;;
+      caveman-always) CAVEMAN_ALWAYS=1 ;;
+      ponytail) PONYTAIL=1 ;;
+      ponytail-always) PONYTAIL_ALWAYS=1 ;;
+      orquestrator) ORQUESTRATOR=1 ;;
+      superpowers) SUPERPOWERS=1 ;;
+      centaury) CENTAURY=1 ;;
+      completions) COMPLETIONS=1 ;;
+      security) SECURITY=1 ;;
+      frontend) FRONTEND=1 ;;
+      playwright) PLAYWRIGHT=1 ;;
+      react) REACT=1 ;;
+      webapp) WEBAPP=1 ;;
+      mcp-builder) MCPBUILDER=1 ;;
+      grill-with-docs) GRILLDOCS=1 ;;
+      security-bp) SECBP=1 ;;
+      diff-review) DIFFREVIEW=1 ;;
+      gh-fix-ci) GHFIXCI=1 ;;
+    esac
+  done <<<"$choices"
+  [[ "$CAVEMAN" == 1 ]] || CAVEMAN_ALWAYS=0
+  [[ "$PONYTAIL" == 1 ]] || PONYTAIL_ALWAYS=0
+  [[ "$TARGET_CODEX" == 1 ]] || { SUPERPOWERS=0; SECURITY=0; }
+  if [[ -n "${AICLI_ULTIMATE_LSP:-}" ]]; then
+    [[ "$AICLI_ULTIMATE_LSP" =~ ^[01]$ ]] || die "AICLI_ULTIMATE_LSP must be 0 or 1"
+    LSP="$AICLI_ULTIMATE_LSP"
+  fi
+  if [[ -n "${AICLI_ULTIMATE_EFFORT:-}" ]]; then
+    EFFORT="$AICLI_ULTIMATE_EFFORT"
+  else
+    EFFORT="$(whiptail --title "AI CLI Ultimate" --menu "Reasoning effort" 12 50 3 \
+      xhigh "Best quality (default)" \
+      high "Balanced" \
+      medium "Fastest" \
+      </dev/tty 3>&1 1>&2 2>&3)" || return 1
+  fi
+}
+
 resolve_source() {
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
@@ -98,7 +186,7 @@ install_codex_if_missing() {
   command -v codex >/dev/null 2>&1 && return
   ask "Codex CLI is missing. Install @openai/codex with npm?" y || die "Codex CLI is required"
   command -v npm >/dev/null || die "npm is required to install Codex automatically"
-  [[ "$DRY_RUN" == 1 ]] || npm install -g @openai/codex
+  [[ "$OFFLINE" == 1 ]] || npm install -g @openai/codex
 }
 
 install_hcom_if_missing() {
@@ -107,7 +195,7 @@ install_hcom_if_missing() {
     HCOM_BIN="$(command -v hcom)"
     return 0
   fi
-  [[ "$DRY_RUN" != 1 ]] || return 0
+  [[ "$OFFLINE" != 1 ]] || return 0
   command -v curl >/dev/null 2>&1 || die "curl is required to install hcom"
   installer="$(mktemp "${TMPDIR:-/tmp}/hcom-installer.XXXXXX")"
   if ! curl -fsSL "$HCOM_INSTALLER_URL" -o "$installer"; then
@@ -152,7 +240,7 @@ except (OSError, ValueError, TypeError):
 
 configure_hcom() {
   local tool enabled marker_dir="$CONFIG_HOME/hcom-hooks"
-  [[ "$ORQUESTRATOR" == 1 && "$DRY_RUN" != 1 ]] || return 0
+  [[ "$ORQUESTRATOR" == 1 && "$OFFLINE" != 1 ]] || return 0
   install_hcom_if_missing
   mkdir -p "$marker_dir"
   for tool in codex claude opencode omp antigravity; do
@@ -175,7 +263,7 @@ configure_hcom() {
 }
 
 report_orquestrator() {
-  [[ "$ORQUESTRATOR" == 1 && "$DRY_RUN" != 1 ]] || return 0
+  [[ "$ORQUESTRATOR" == 1 && "$OFFLINE" != 1 ]] || return 0
   info "Orquestrator (HCOM) install check:"
   local tool enabled skilldir hook skill
   for tool in codex claude opencode omp antigravity; do
@@ -221,7 +309,7 @@ render_agents() {
 
 install_language_servers() {
   local packages=()
-  [[ "$LSP" == 1 && "$DRY_RUN" != 1 ]] || return 0
+  [[ "$LSP" == 1 && "$OFFLINE" != 1 ]] || return 0
 
   if ! command -v rust-analyzer >/dev/null 2>&1; then
     if command -v rustup >/dev/null 2>&1; then
@@ -450,7 +538,35 @@ copy_skill_source() {
     rm -rf "$destination"
     cp -R "$skill" "$destination"
     touch "$marker"
+    printf '%s\n' "$destination" >>"$NEW_MANIFEST"
   done
+}
+
+# Remove owned files/skills recorded by a previous install that this run no
+# longer installs (stale after an upgrade or a narrower selection). Everything
+# is backed up before removal and only marker-verified paths are touched.
+prune_orphans() {
+  local path
+  if [[ ! -r "$MANIFEST" ]]; then
+    sort -u "$NEW_MANIFEST" >"$MANIFEST"
+    rm -f "$NEW_MANIFEST"
+    return 0
+  fi
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    grep -Fxq "$path" "$NEW_MANIFEST" && continue
+    if [[ -d "$path" && -e "$path/.aicli-ultimate-owned" ]]; then
+      backup_file "$path" "$backup"
+      rm -rf "$path"
+      info "Removed stale owned skill: $path"
+    elif [[ -f "$path" && -e "$path.aicli-ultimate-owned" ]]; then
+      backup_file "$path" "$backup"
+      rm -f "$path" "$path.aicli-ultimate-owned"
+      info "Removed stale owned file: $path"
+    fi
+  done <"$MANIFEST"
+  sort -u "$NEW_MANIFEST" >"$MANIFEST"
+  rm -f "$NEW_MANIFEST"
 }
 
 install_owned_file() {
@@ -462,6 +578,7 @@ install_owned_file() {
   mkdir -p "$(dirname "$target")"
   cp "$source" "$target"
   touch "$marker"
+  printf '%s\n' "$target" >>"$NEW_MANIFEST"
 }
 
 copy_skill_set() {
@@ -512,7 +629,7 @@ configure_antigravity() {
   cp "$CONFIG_HOME/global-instructions.md" "$stage/rules/global.md"
   copy_skill_set "$stage/skills"
 
-  if [[ "$DRY_RUN" != 1 ]] && command -v agy >/dev/null 2>&1; then
+  if [[ "$OFFLINE" != 1 ]] && command -v agy >/dev/null 2>&1; then
     if ! agy plugin validate "$stage" >/dev/null; then
       rm -rf "$stage_root"
       warn "Antigravity rejected the generated plugin; keeping the previous installation."
@@ -562,7 +679,7 @@ configure_omp_statusline() {
       "$agent_dir/hooks/aicli-ultimate-statusline.ts.aicli-ultimate-owned"
   fi
   if command -v omp >/dev/null 2>&1 && ! grep -Eq '^statusLine:' "$config" 2>/dev/null; then
-    if [[ "$DRY_RUN" == 1 ]]; then
+    if [[ "$OFFLINE" == 1 ]]; then
       return 0
     elif omp config set statusLine.preset full >/dev/null \
       && omp config set statusLine.separator powerline >/dev/null; then
@@ -713,7 +830,7 @@ except (OSError, ValueError, TypeError):
 
 install_native_mode_plugins() {
   local marker_dir="$CONFIG_HOME/native-plugins"
-  [[ "$DRY_RUN" == 1 ]] && return 0
+  [[ "$OFFLINE" == 1 ]] && return 0
   mkdir -p "$marker_dir"
 
   if [[ "$TARGET_CLAUDE" == 1 ]]; then
@@ -755,7 +872,29 @@ resolve_source
 printf '\n\033[1;35mAI CLI Ultimate setup\033[0m\n\n'
 command -v python3 >/dev/null || die "python3 is required"
 
-if [[ -n "${AICLI_ULTIMATE_TARGETS:-}" ]]; then
+RELEASE_VERSION="$(cat "$ROOT/VERSION" 2>/dev/null || printf dev)"
+if [[ -r "$STATE_FILE" ]]; then
+  PREVIOUS_RELEASE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("release", "unknown"))' "$STATE_FILE" 2>/dev/null || printf unknown)"
+  if [[ "$PREVIOUS_RELEASE" == "$RELEASE_VERSION" ]]; then
+    info "Existing installation ($PREVIOUS_RELEASE) detected; reinstalling."
+  else
+    info "Existing installation ($PREVIOUS_RELEASE) detected; upgrading to $RELEASE_VERSION."
+  fi
+fi
+
+TUI_DONE=0
+if [[ "$NONINTERACTIVE" != 1 && -z "${AICLI_ULTIMATE_TARGETS:-}" && -r /dev/tty && -w /dev/tty ]] \
+  && command -v whiptail >/dev/null 2>&1; then
+  if run_tui; then
+    TUI_DONE=1
+  else
+    info "Selection cancelled in the checklist; using plain prompts."
+  fi
+fi
+
+if [[ "$TUI_DONE" == 1 ]]; then
+  :
+elif [[ -n "${AICLI_ULTIMATE_TARGETS:-}" ]]; then
   target_selected codex && TARGET_CODEX=1 || TARGET_CODEX=0
   target_selected claude && TARGET_CLAUDE=1 || TARGET_CLAUDE=0
   target_selected opencode && TARGET_OPENCODE=1 || TARGET_OPENCODE=0
@@ -776,56 +915,67 @@ fi
 if (( TARGET_CODEX + TARGET_CLAUDE + TARGET_OPENCODE + TARGET_OMP + TARGET_ANTIGRAVITY == 0 )); then
   die "select at least one target"
 fi
-[[ "$TARGET_CODEX" == 1 ]] && install_codex_if_missing
-
-EFFORT="${AICLI_ULTIMATE_EFFORT:-xhigh}"
-if [[ "$NONINTERACTIVE" != 1 ]]; then
-  read -r -p "Reasoning effort [xhigh/high/medium] (xhigh): " EFFORT </dev/tty || EFFORT=xhigh
-  EFFORT="${EFFORT:-xhigh}"
-fi
-[[ "$EFFORT" =~ ^(xhigh|high|medium)$ ]] || die "invalid reasoning effort: $EFFORT"
-
-if (( TARGET_CODEX + TARGET_CLAUDE + TARGET_OPENCODE + TARGET_OMP + TARGET_ANTIGRAVITY > 0 )); then
-  ask "Install supported Powerline statuslines?" y && STATUSLINE=1 || STATUSLINE=0
-else
-  STATUSLINE=0
-fi
-if [[ -n "${AICLI_ULTIMATE_LSP:-}" ]]; then
-  [[ "$AICLI_ULTIMATE_LSP" =~ ^[01]$ ]] || die "AICLI_ULTIMATE_LSP must be 0 or 1"
-  LSP="$AICLI_ULTIMATE_LSP"
-else
-  ask "Install essential LSP support (Rust, TypeScript/JavaScript, Python, and GitHub Markdown)?" y && LSP=1 || LSP=0
-fi
 MCPLS_BIN="$BIN_DIR/aicli-mcpls"
 GITHUB_LSP_BIN="$BIN_DIR/github-lsp"
-ask "Install the Caveman plugin?" y && CAVEMAN=1 || CAVEMAN=0
-if [[ "$CAVEMAN" == 1 ]] && ask "Keep Caveman active by default?" y; then CAVEMAN_ALWAYS=1; else CAVEMAN_ALWAYS=0; fi
-ask "Install the Ponytail plugin?" y && PONYTAIL=1 || PONYTAIL=0
-if [[ "$PONYTAIL" == 1 ]] && ask "Keep Ponytail active by default?" y; then PONYTAIL_ALWAYS=1; else PONYTAIL_ALWAYS=0; fi
-ask "Install HCOM Orquestrator mode?" y && ORQUESTRATOR=1 || ORQUESTRATOR=0
-if [[ "$TARGET_CODEX" == 1 ]]; then
-  ask "Install the official Superpowers plugin?" y && SUPERPOWERS=1 || SUPERPOWERS=0
-else
-  SUPERPOWERS=0
-fi
-ask "Enable the CentauryAI protected-branch workflow?" y && CENTAURY=1 || CENTAURY=0
-ask "Install shell completions?" y && COMPLETIONS=1 || COMPLETIONS=0
-ask "Install optional frontend skills?" n && FRONTEND=1 || FRONTEND=0
-ask "Install optional Playwright testing skill?" n && PLAYWRIGHT=1 || PLAYWRIGHT=0
-ask "Install optional React best-practices skill?" n && REACT=1 || REACT=0
-ask "Install optional web-app testing skill (Anthropic)?" n && WEBAPP=1 || WEBAPP=0
-ask "Install optional MCP builder skill (Anthropic)?" n && MCPBUILDER=1 || MCPBUILDER=0
-ask "Install optional plan-grilling skill with ADR docs (grill-with-docs)?" n && GRILLDOCS=1 || GRILLDOCS=0
-ask "Install optional security best-practices skill (OpenAI)?" n && SECBP=1 || SECBP=0
-if [[ "$TARGET_CODEX" == 1 ]]; then
-  ask "Install the official Codex Security plugin?" n && SECURITY=1 || SECURITY=0
-else
-  SECURITY=0
-fi
 
-OPTIONAL_SKILLS=$((FRONTEND + PLAYWRIGHT + REACT + WEBAPP + MCPBUILDER + GRILLDOCS + SECBP))
-# The "Optional skills" step only runs when selected outside dry-run.
-[[ "$DRY_RUN" != 1 ]] && (( OPTIONAL_SKILLS > 0 )) || STEP_TOTAL=7
+if [[ "$TUI_DONE" != 1 ]]; then
+  EFFORT="${AICLI_ULTIMATE_EFFORT:-xhigh}"
+  if [[ "$NONINTERACTIVE" != 1 ]]; then
+    read -r -p "Reasoning effort [xhigh/high/medium] (xhigh): " EFFORT </dev/tty || EFFORT=xhigh
+    EFFORT="${EFFORT:-xhigh}"
+  fi
+  ask "Install supported Powerline statuslines?" y && STATUSLINE=1 || STATUSLINE=0
+  if [[ -n "${AICLI_ULTIMATE_LSP:-}" ]]; then
+    [[ "$AICLI_ULTIMATE_LSP" =~ ^[01]$ ]] || die "AICLI_ULTIMATE_LSP must be 0 or 1"
+    LSP="$AICLI_ULTIMATE_LSP"
+  else
+    ask "Install essential LSP support (Rust, TypeScript/JavaScript, Python, and GitHub Markdown)?" y && LSP=1 || LSP=0
+  fi
+  ask "Install the Caveman plugin?" y && CAVEMAN=1 || CAVEMAN=0
+  if [[ "$CAVEMAN" == 1 ]] && ask "Keep Caveman active by default?" y; then CAVEMAN_ALWAYS=1; else CAVEMAN_ALWAYS=0; fi
+  ask "Install the Ponytail plugin?" y && PONYTAIL=1 || PONYTAIL=0
+  if [[ "$PONYTAIL" == 1 ]] && ask "Keep Ponytail active by default?" y; then PONYTAIL_ALWAYS=1; else PONYTAIL_ALWAYS=0; fi
+  ask "Install HCOM Orquestrator mode?" y && ORQUESTRATOR=1 || ORQUESTRATOR=0
+  if [[ "$TARGET_CODEX" == 1 ]]; then
+    ask "Install the official Superpowers plugin?" y && SUPERPOWERS=1 || SUPERPOWERS=0
+  else
+    SUPERPOWERS=0
+  fi
+  ask "Enable the CentauryAI protected-branch workflow?" y && CENTAURY=1 || CENTAURY=0
+  ask "Install shell completions?" y && COMPLETIONS=1 || COMPLETIONS=0
+  ask "Install optional frontend skills?" n && FRONTEND=1 || FRONTEND=0
+  ask "Install optional Playwright testing skill?" n && PLAYWRIGHT=1 || PLAYWRIGHT=0
+  ask "Install optional React best-practices skill?" n && REACT=1 || REACT=0
+  ask "Install optional web-app testing skill (Anthropic)?" n && WEBAPP=1 || WEBAPP=0
+  ask "Install optional MCP builder skill (Anthropic)?" n && MCPBUILDER=1 || MCPBUILDER=0
+  ask "Install optional plan-grilling skill with ADR docs (grill-with-docs)?" n && GRILLDOCS=1 || GRILLDOCS=0
+  ask "Install optional security best-practices skill (OpenAI)?" n && SECBP=1 || SECBP=0
+  ask "Install optional differential security review skill (Trail of Bits)?" n && DIFFREVIEW=1 || DIFFREVIEW=0
+  ask "Install optional GitHub Actions fixer skill (OpenAI)?" n && GHFIXCI=1 || GHFIXCI=0
+  if [[ "$TARGET_CODEX" == 1 ]]; then
+    ask "Install the official Codex Security plugin?" n && SECURITY=1 || SECURITY=0
+  else
+    SECURITY=0
+  fi
+fi
+[[ "$EFFORT" =~ ^(xhigh|high|medium)$ ]] || die "invalid reasoning effort: $EFFORT"
+[[ "$TARGET_CODEX" == 1 && "$DRY_RUN" != 1 ]] && install_codex_if_missing
+
+OPTIONAL_SKILLS=$((FRONTEND + PLAYWRIGHT + REACT + WEBAPP + MCPBUILDER + GRILLDOCS + SECBP + DIFFREVIEW + GHFIXCI))
+# The "Optional skills" step only runs when selected outside offline mode.
+[[ "$OFFLINE" != 1 ]] && (( OPTIONAL_SKILLS > 0 )) || STEP_TOTAL=7
+
+if [[ "$DRY_RUN" == 1 ]]; then
+  info "Dry run: no files or configuration will be changed."
+  printf 'release: %s\n' "$RELEASE_VERSION"
+  printf 'targets: codex=%s claude=%s opencode=%s omp=%s antigravity=%s\n' \
+    "$TARGET_CODEX" "$TARGET_CLAUDE" "$TARGET_OPENCODE" "$TARGET_OMP" "$TARGET_ANTIGRAVITY"
+  printf 'effort=%s statusline=%s lsp=%s caveman=%s/%s ponytail=%s/%s orquestrator=%s\n' \
+    "$EFFORT" "$STATUSLINE" "$LSP" "$CAVEMAN" "$CAVEMAN_ALWAYS" "$PONYTAIL" "$PONYTAIL_ALWAYS" "$ORQUESTRATOR"
+  printf 'superpowers=%s centaury=%s completions=%s security=%s optional_skills=%s\n' \
+    "$SUPERPOWERS" "$CENTAURY" "$COMPLETIONS" "$SECURITY" "$OPTIONAL_SKILLS"
+  exit 0
+fi
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup="$CONFIG_HOME/backups/$timestamp"
@@ -874,6 +1024,9 @@ backup_file "$BIN_DIR/aicli-agy" "$backup"
 
 step "Installing files"
 mkdir -p "$INSTALL_DIR" "$CONFIG_HOME" "$BIN_DIR"
+MANIFEST="$CONFIG_HOME/manifest.txt"
+NEW_MANIFEST="$CONFIG_HOME/manifest.txt.new"
+: >"$NEW_MANIFEST"
 if [[ "$ROOT" != "$INSTALL_DIR" ]]; then
   (cd "$ROOT" && tar --exclude=.git -cf - .) | (cd "$INSTALL_DIR" && tar -xf -)
 fi
@@ -885,20 +1038,20 @@ if [[ "$LSP" == 1 && ( "$TARGET_CODEX" == 1 || "$TARGET_ANTIGRAVITY" == 1 ) ]]; 
 fi
 step "Language servers"
 install_language_servers
-if [[ "$LSP" == 1 ]] && { [[ "$DRY_RUN" == 1 ]] \
+if [[ "$LSP" == 1 ]] && { [[ "$OFFLINE" == 1 ]] \
   || { [[ -x "$MCPLS_BIN" && -f "$MCPLS_BIN.aicli-ultimate-owned" ]] \
     && "$MCPLS_BIN" --version 2>/dev/null | grep -Eq "^mcpls ${MCPLS_VERSION}([[:space:]]|$)"; }; }; then
   BRIDGE_READY=1
 else
   BRIDGE_READY=0
 fi
-if [[ "$LSP" == 1 ]] && { [[ "$DRY_RUN" == 1 ]] \
+if [[ "$LSP" == 1 ]] && { [[ "$OFFLINE" == 1 ]] \
   || command -v github-lsp >/dev/null 2>&1 || [[ -x "$GITHUB_LSP_BIN" ]]; }; then
   GITHUB_LSP_READY=1
 else
   GITHUB_LSP_READY=0
 fi
-if [[ "$GITHUB_LSP_READY" == 1 && "$DRY_RUN" != 1 ]]; then
+if [[ "$GITHUB_LSP_READY" == 1 && "$OFFLINE" != 1 ]]; then
   if ! command -v gh >/dev/null 2>&1; then
     warn "github-lsp requires the gh CLI; install and authenticate gh before use."
   elif ! gh auth status >/dev/null 2>&1; then
@@ -1044,7 +1197,7 @@ if [[ "$STATUSLINE" == 1 && "$TARGET_ANTIGRAVITY" == 1 ]] && ! command -v jq >/d
   warn "Antigravity statusline requires jq; Antigravity will ignore output until jq is installed."
 fi
 
-if [[ "$DRY_RUN" != 1 && "$TARGET_CODEX" == 1 ]]; then
+if [[ "$OFFLINE" != 1 && "$TARGET_CODEX" == 1 ]]; then
   codex_marker_dir="$CONFIG_HOME/native-plugins"
   marketplace_list="$(codex plugin marketplace list 2>/dev/null || true)"
   if ! awk '{print $1}' <<<"$marketplace_list" | grep -qx aicli-ultimate; then
@@ -1062,7 +1215,7 @@ if [[ "$DRY_RUN" != 1 && "$TARGET_CODEX" == 1 ]]; then
   if [[ "$SECURITY" == 1 ]]; then install_plugin codex-security@openai-curated 0; fi
 fi
 
-if [[ "$DRY_RUN" != 1 ]] && (( OPTIONAL_SKILLS > 0 )); then
+if [[ "$OFFLINE" != 1 ]] && (( OPTIONAL_SKILLS > 0 )); then
   step "Optional skills"
   skills_agent_list="$(skills_agents)"
   install_optional_skill() {
@@ -1086,12 +1239,16 @@ if [[ "$DRY_RUN" != 1 ]] && (( OPTIONAL_SKILLS > 0 )); then
     install_optional_skill mattpocock/skills@domain-modeling domain-modeling
   fi
   [[ "$SECBP" == 1 ]] && install_optional_skill openai/skills@security-best-practices security-best-practices
+  [[ "$DIFFREVIEW" == 1 ]] && install_optional_skill trailofbits/skills@differential-review differential-review
+  [[ "$GHFIXCI" == 1 ]] && install_optional_skill openai/skills@gh-fix-ci gh-fix-ci
 fi
 
 step "Finalizing"
+prune_orphans
 cat >"$STATE_FILE" <<EOF
 {
   "version": 1,
+  "release": "$RELEASE_VERSION",
   "installed_at": "$timestamp",
   "backup": "$backup",
   "install_dir": "$INSTALL_DIR",

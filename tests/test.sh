@@ -64,7 +64,7 @@ CODEX_HOME="$TMP/home/.codex" \
 AICLI_ULTIMATE_INSTALL_DIR="$TMP/home/.local/share/aicli-ultimate" \
 AICLI_ULTIMATE_BIN_DIR="$TMP/home/.local/bin" \
 AICLI_ULTIMATE_NONINTERACTIVE=1 \
-AICLI_ULTIMATE_DRY_RUN=1 \
+AICLI_ULTIMATE_OFFLINE=1 \
 AICLI_ULTIMATE_TARGETS=codex,claude,opencode,omp,antigravity \
 SHELL=/bin/bash \
   "$ROOT/install.sh" >/dev/null
@@ -259,7 +259,7 @@ CODEX_HOME="$TMP/no-lsp-home/.codex" \
 AICLI_ULTIMATE_INSTALL_DIR="$TMP/no-lsp-home/.local/share/aicli-ultimate" \
 AICLI_ULTIMATE_BIN_DIR="$TMP/no-lsp-home/.local/bin" \
 AICLI_ULTIMATE_NONINTERACTIVE=1 \
-AICLI_ULTIMATE_DRY_RUN=1 \
+AICLI_ULTIMATE_OFFLINE=1 \
 AICLI_ULTIMATE_LSP=0 \
 AICLI_ULTIMATE_TARGETS=codex \
 SHELL=/bin/bash \
@@ -278,7 +278,7 @@ CODEX_HOME="$TMP/preserved-home/.codex" \
 AICLI_ULTIMATE_INSTALL_DIR="$TMP/preserved-home/.local/share/aicli-ultimate" \
 AICLI_ULTIMATE_BIN_DIR="$TMP/preserved-home/.local/bin" \
 AICLI_ULTIMATE_NONINTERACTIVE=1 \
-AICLI_ULTIMATE_DRY_RUN=1 \
+AICLI_ULTIMATE_OFFLINE=1 \
 AICLI_ULTIMATE_TARGETS=opencode \
 SHELL=/bin/bash \
   "$ROOT/install.sh" >/dev/null
