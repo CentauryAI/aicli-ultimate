@@ -16,7 +16,7 @@ The installer detects installed CLIs and asks which ones to configure. Safe defa
 - native skills and read-only planner, researcher, and reviewer agents where supported;
 - official Superpowers for Codex;
 - the CentauryAI workflow skill/plugin and conditional protected-branch Git hooks;
-- a three-row Codex Powerline and one-row Claude Code Powerline when dependencies exist;
+- matching three-row Powerlines for Codex, Claude Code, OpenCode, OMP, and Antigravity CLI;
 - Midnight Blue for Codex and Tokyo Night for OpenCode.
 
 Existing files are copied to `~/.config/aicli-ultimate/backups/<timestamp>` before changes. Rerun the command to update.
@@ -36,12 +36,12 @@ AICLI_ULTIMATE_TARGETS=codex,claude,opencode,omp,antigravity \
 | CLI | Global rules | Skills/plugins | Extra configuration |
 |---|---|---|---|
 | Codex | `~/.codex/AGENTS.md` | bundled Codex marketplace | profile, agents, Midnight Blue, Powerline |
-| Claude Code | `~/.claude/CLAUDE.md` | `~/.claude/skills` | subagents, native Powerline statusline |
-| OpenCode | `~/.config/opencode/AGENTS.md` | shared `~/.agents/skills` | subagents, Tokyo Night |
-| OMP | `~/AGENTS.md` | shared `~/.agents/skills` | native skill discovery and shell completion |
-| Antigravity CLI | global plugin rule | global plugin skills | `~/.gemini/config/plugins/aicli-ultimate` |
+| Claude Code | `~/.claude/CLAUDE.md` | `~/.claude/skills` | subagents, native three-row Powerline |
+| OpenCode | `~/.config/opencode/AGENTS.md` | shared `~/.agents/skills` | subagents, Tokyo Night, tmux Powerline |
+| OMP | `~/AGENTS.md` | shared `~/.agents/skills` | native skill discovery, completion, tmux Powerline |
+| Antigravity CLI | global plugin rule | global plugin skills | global plugin and `agy` tmux Powerline |
 
-Managed instruction blocks preserve unrelated content. Files and skill directories that will be replaced are backed up first.
+Managed instruction blocks and JSON path updates preserve unrelated content. Existing statusline settings are backed up and restored by the uninstaller. Files and skill directories owned by another setup are never replaced.
 
 ## Skills and plugins
 
@@ -72,9 +72,9 @@ Client-side hooks are not security boundaries. Organization administrators shoul
 
 ## Powerline statusline
 
-The optional wrapper starts interactive Codex sessions inside an isolated tmux server and renders three decorated rows below Codex: model/reasoning/path/Git/modes, context/tokens/cache, and 5-hour/weekly usage. It refreshes every 10 seconds. Claude Code receives a native event-driven one-row Powerline with model/path/Git/context.
+Codex renders model/reasoning/path/Git/modes, context/tokens/cache, and 5-hour/weekly usage. Claude Code uses its native statusline input to render the same palette and three-row geometry. OpenCode, OMP, and `agy` run through isolated tmux wrappers showing agent/path/Git, session/commit/time, and active modes. Tmux statuslines refresh every 10 seconds; Claude refreshes when Claude Code emits a native status update.
 
-Codex Powerline dependencies: `tmux`, `jq`, `sqlite3`, `git`, Bash 3.2 or later, and a Nerd Font. Claude Powerline requires `jq`, `git`, Bash, and a Nerd Font. Missing Codex dependencies trigger a clean fallback to the normal interface.
+Codex Powerline dependencies: `tmux`, `jq`, `sqlite3`, `git`, Bash 3.2 or later, and a Nerd Font. Claude requires `jq`, `git`, Bash, and a Nerd Font. OpenCode, OMP, and Antigravity require `tmux`, `git`, Bash, and a Nerd Font. Missing wrapper dependencies trigger a clean fallback to the native CLI.
 
 ## Uninstall
 

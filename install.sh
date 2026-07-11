@@ -95,6 +95,11 @@ configure_shell() {
     printf '\n%s\n' "$marker_start"
     printf 'export PATH="$HOME/.local/bin:$PATH"\n'
     [[ "$TARGET_CODEX" == 1 ]] && printf "alias codex='aicli-ultimate'\n"
+    if [[ "$STATUSLINE" == 1 ]]; then
+      [[ "$TARGET_OPENCODE" == 1 ]] && printf "alias opencode='aicli-opencode'\n"
+      [[ "$TARGET_OMP" == 1 ]] && printf "alias omp='aicli-omp'\n"
+      [[ "$TARGET_ANTIGRAVITY" == 1 ]] && printf "alias agy='aicli-agy'\n"
+    fi
     if [[ "$COMPLETIONS" == 1 ]]; then
       if [[ "$TARGET_CODEX" == 1 && "${SHELL##*/}" == zsh ]]; then
         printf 'autoload -Uz compinit && compinit\n'
@@ -191,7 +196,20 @@ configure_antigravity() {
   copy_skill_set "$target/skills"
   if command -v agy >/dev/null 2>&1 && ! agy plugin validate "$target" >/dev/null; then
     warn "Antigravity rejected the generated plugin; files remain at $target for inspection."
+  elif [[ "$DRY_RUN" != 1 ]] && command -v agy >/dev/null 2>&1 \
+    && ! agy plugin install "$target" >/dev/null; then
+    warn "Antigravity validated the plugin but could not register it."
   fi
+}
+
+configure_generic_statusline() {
+  local agent="$1" wrapper="$2" tmux_config
+  tmux_config="$CONFIG_HOME/tmux-$agent.conf"
+  sed \
+    -e "s|@STATUS_COMMAND@|$BIN_DIR/aicli-agent-status|g" \
+    -e "s|@AGENT@|$agent|g" \
+    "$ROOT/statusline/tmux-agent.conf" >"$tmux_config"
+  install_owned_file "$ROOT/statusline/aicli-agent-powerline" "$BIN_DIR/$wrapper"
 }
 
 target_selected() {
@@ -223,8 +241,9 @@ configure_centaury_guard() {
 }
 
 install_plugin() {
-  local plugin="$1" required="${2:-1}"
-  if codex plugin list 2>/dev/null | grep -Eq "^${plugin//./\.}[[:space:]]+installed"; then
+  local plugin="$1" required="${2:-1}" plugin_list
+  plugin_list="$(codex plugin list 2>/dev/null || true)"
+  if grep -Eq "^${plugin//./\.}[[:space:]]+installed" <<<"$plugin_list"; then
     info "Plugin already installed: $plugin"
   elif ! codex plugin add "$plugin"; then
     if [[ "$required" == 1 ]]; then
@@ -268,7 +287,7 @@ if [[ "$NONINTERACTIVE" != 1 ]]; then
 fi
 [[ "$EFFORT" =~ ^(xhigh|high|medium)$ ]] || die "invalid reasoning effort: $EFFORT"
 
-if [[ "$TARGET_CODEX" == 1 || "$TARGET_CLAUDE" == 1 ]]; then
+if (( TARGET_CODEX + TARGET_CLAUDE + TARGET_OPENCODE + TARGET_OMP + TARGET_ANTIGRAVITY > 0 )); then
   ask "Install supported Powerline statuslines?" y && STATUSLINE=1 || STATUSLINE=0
 else
   STATUSLINE=0
@@ -324,6 +343,10 @@ if [[ "$TARGET_ANTIGRAVITY" == 1 ]]; then
 fi
 backup_file "$BIN_DIR/aicli-ultimate" "$backup"
 backup_file "$BIN_DIR/aicli-ultimate-status" "$backup"
+backup_file "$BIN_DIR/aicli-agent-status" "$backup"
+backup_file "$BIN_DIR/aicli-opencode" "$backup"
+backup_file "$BIN_DIR/aicli-omp" "$backup"
+backup_file "$BIN_DIR/aicli-agy" "$backup"
 
 info "Installing files"
 mkdir -p "$INSTALL_DIR" "$CONFIG_HOME" "$BIN_DIR"
@@ -358,11 +381,12 @@ if [[ "$TARGET_CLAUDE" == 1 ]]; then
     install_owned_file "$file" "$HOME/.claude/agents/$(basename "$file")"
   done
   if [[ "$STATUSLINE" == 1 ]]; then
-    if python3 "$ROOT/scripts/json_add.py" "$HOME/.claude/settings.json" statusLine \
-      "{\"type\":\"command\",\"command\":\"$BIN_DIR/claude-ultimate-status\"}"; then
+    claude_status_json="$(python3 -c 'import json,sys; print(json.dumps({"type":"command","command":sys.argv[1]}))' "$BIN_DIR/claude-ultimate-status")"
+    if python3 "$ROOT/scripts/json_override.py" set "$HOME/.claude/settings.json" statusLine \
+      "$claude_status_json" "$CONFIG_HOME/claude-statusline-previous.json"; then
       install_owned_file "$ROOT/statusline/claude-powerline-status" "$BIN_DIR/claude-ultimate-status"
     else
-      warn "Keeping the existing Claude Code statusLine setting."
+      warn "Keeping a Claude statusLine changed after AI CLI Ultimate was installed."
     fi
   fi
 fi
@@ -396,15 +420,23 @@ if [[ "$CENTAURY" == 1 ]]; then
   configure_centaury_guard
 fi
 
+printf 'statusline=%s\ncaveman=%s\nponytail=%s\n' \
+  "$([[ "$STATUSLINE" == 1 ]] && printf enabled || printf disabled)" \
+  "$([[ "$CAVEMAN_ALWAYS" == 1 ]] && printf wenyan-ultra || printf off)" \
+  "$([[ "$PONYTAIL_ALWAYS" == 1 ]] && printf full || printf off)" >"$CONFIG_HOME/modes"
+
 if [[ "$TARGET_CODEX" == 1 ]]; then
-  printf 'statusline=%s\ncaveman=%s\nponytail=%s\n' \
-    "$([[ "$STATUSLINE" == 1 ]] && printf enabled || printf disabled)" \
-    "$([[ "$CAVEMAN_ALWAYS" == 1 ]] && printf wenyan-ultra || printf off)" \
-    "$([[ "$PONYTAIL_ALWAYS" == 1 ]] && printf full || printf off)" >"$CONFIG_HOME/modes"
   sed "s|@STATUS_COMMAND@|$BIN_DIR/aicli-ultimate-status|g" \
     "$ROOT/statusline/tmux.conf" >"$CONFIG_HOME/tmux.conf"
   install_owned_file "$ROOT/statusline/codex-powerline" "$BIN_DIR/aicli-ultimate"
   install_owned_file "$ROOT/statusline/codex-powerline-status" "$BIN_DIR/aicli-ultimate-status"
+fi
+
+if [[ "$STATUSLINE" == 1 ]] && (( TARGET_OPENCODE + TARGET_OMP + TARGET_ANTIGRAVITY > 0 )); then
+  install_owned_file "$ROOT/statusline/aicli-agent-status" "$BIN_DIR/aicli-agent-status"
+  if [[ "$TARGET_OPENCODE" == 1 ]]; then configure_generic_statusline opencode aicli-opencode; fi
+  if [[ "$TARGET_OMP" == 1 ]]; then configure_generic_statusline omp aicli-omp; fi
+  if [[ "$TARGET_ANTIGRAVITY" == 1 ]]; then configure_generic_statusline agy aicli-agy; fi
 fi
 
 configure_shell
@@ -421,8 +453,17 @@ if [[ "$STATUSLINE" == 1 && "$TARGET_CLAUDE" == 1 ]] && ! command -v jq >/dev/nu
   warn "Claude statusline requires jq. Claude Code will ignore output until jq is installed."
 fi
 
+if [[ "$STATUSLINE" == 1 ]] && (( TARGET_OPENCODE + TARGET_OMP + TARGET_ANTIGRAVITY > 0 )); then
+  missing=()
+  for command in tmux git; do command -v "$command" >/dev/null || missing+=("$command"); done
+  if ((${#missing[@]})); then
+    warn "OpenCode/OMP/Antigravity statuslines need: ${missing[*]}. Their wrappers will fall back to the native CLI."
+  fi
+fi
+
 if [[ "$DRY_RUN" != 1 && "$TARGET_CODEX" == 1 ]]; then
-  if ! codex plugin marketplace list 2>/dev/null | awk '{print $1}' | grep -qx aicli-ultimate; then
+  marketplace_list="$(codex plugin marketplace list 2>/dev/null || true)"
+  if ! awk '{print $1}' <<<"$marketplace_list" | grep -qx aicli-ultimate; then
     codex plugin marketplace add "$INSTALL_DIR"
   fi
   if [[ "$CAVEMAN" == 1 ]]; then install_plugin caveman@aicli-ultimate; fi
