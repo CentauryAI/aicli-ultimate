@@ -61,7 +61,7 @@ Codex and Antigravity CLI do not expose a native LSP client, so AI CLI Ultimate 
 
 ## Skills and plugins
 
-Codex skills are not custom slash commands. Invoke them as `$caveman`, `$ponytail`, `$rust-best-practices`, with `@name`, or naturally; `/caveman` is not expected in Codex's slash menu. Claude Code exposes personal skills as slash commands. OMP exposes `/skill:<name>`. OpenCode and Antigravity discover and invoke skills through their native skill systems.
+Codex skills are not custom slash commands. Invoke them as `$caveman`, `$ponytail`, `$rust-best-practices`, `$orquestrator-hcom`, with `@name`, or naturally; `/caveman` and `/orchestration` are not expected in Codex's slash menu. When Codex and OpenCode/OMP are selected together, Codex reuses their single `~/.agents/skills` copy instead of installing duplicate native plugins. Run `aicli-ultimate --doctor` to check the Codex profile, theme, statusline blockers, optional metrics, and bundled-skill source. Claude Code exposes personal skills as slash commands. OMP exposes `/skill:<name>`. OpenCode and Antigravity discover and invoke skills through their native skill systems.
 
 Bundled marketplace plugins:
 

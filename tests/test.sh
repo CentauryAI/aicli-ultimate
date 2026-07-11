@@ -224,7 +224,15 @@ grep -q '^bind-key -T root WheelUpPane copy-mode -e$' "$TMP/home/.config/aicli-u
 grep -q '^export OPENCODE_EXPERIMENTAL_LSP_TOOL=true$' "$TMP/home/.bashrc"
 grep -Fq "export PATH=\"$TMP/home/.local/bin:\$PATH\"" "$TMP/home/.bashrc"
 grep -q '^lsp=enabled$' "$TMP/home/.config/aicli-ultimate/modes"
+grep -q '^codex_skills=shared$' "$TMP/home/.config/aicli-ultimate/modes"
 grep -q 'Prefer native LSP tools' "$TMP/home/.codex/AGENTS.md"
+
+doctor_output="$(HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/home/.config" CODEX_HOME="$TMP/home/.codex" \
+  "$TMP/home/.local/bin/aicli-ultimate" --doctor)"
+grep -q 'profile: installed' <<<"$doctor_output"
+grep -q 'theme: installed' <<<"$doctor_output"
+grep -q 'statusline: Powerline enabled' <<<"$doctor_output"
+grep -q 'bundled skills: shared' <<<"$doctor_output"
 
 claude_payload='{"model":{"display_name":"Claude Test"},"workspace":{"current_dir":"'"$ROOT"'"},"context_window":{"used_percentage":42,"total_input_tokens":12000,"total_output_tokens":3456},"rate_limits":{"five_hour":{"used_percentage":25},"seven_day":{"used_percentage":50}}}'
 claude_status="$(printf '%s' "$claude_payload" | HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/home/.config" "$TMP/home/.local/bin/claude-ultimate-status")"
@@ -338,7 +346,11 @@ jq -e '.plugin == ["@dietrichgebert/ponytail"] and .lsp == true and .permission.
 mkdir -p "$TMP/hcom-bin" "$TMP/hcom-home"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
-  'if [[ "${CODEX_PREINSTALLED:-0}" == 1 && "$*" == "plugin list" ]]; then' \
+  'if [[ "${CODEX_LEGACY:-0}" == 1 && "$*" == "plugin list" ]]; then' \
+  '  printf "caveman@aicli-ultimate  installed\\nponytail@aicli-ultimate  installed\\ncentaury-workflow@aicli-ultimate  installed\\norquestrator@aicli-ultimate  installed\\napollo-rust-best-practices@aicli-ultimate  installed\\n"' \
+  'elif [[ "${CODEX_LEGACY:-0}" == 1 && "$*" == "plugin marketplace list" ]]; then' \
+  '  printf "aicli-ultimate  installed\\n"' \
+  'elif [[ "${CODEX_PREINSTALLED:-0}" == 1 && "$*" == "plugin list" ]]; then' \
   '  printf "apollo-rust-best-practices@aicli-ultimate  installed\\n"' \
   'elif [[ "${CODEX_PREINSTALLED:-0}" == 1 && "$*" == "plugin marketplace list" ]]; then' \
   '  printf "aicli-ultimate  installed\\n"' \
@@ -368,6 +380,9 @@ grep -qx 'hooks add codex' "$TMP/hcom.log"
 test -f "$TMP/hcom-home/.config/aicli-ultimate/hcom-hooks/codex"
 test -f "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-apollo-rust-best-practices"
 test -f "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
+for plugin in caveman ponytail centaury-workflow orquestrator; do
+  test -f "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-$plugin"
+done
 HCOM_TEST_LOG="$TMP/hcom.log" \
 PATH="$TMP/hcom-bin:/usr/bin:/bin" \
 HOME="$TMP/hcom-home" \
@@ -381,6 +396,48 @@ grep -qx 'hooks remove codex' "$TMP/hcom.log"
 test ! -e "$TMP/hcom-home/.config/aicli-ultimate/hcom-hooks/codex"
 test ! -e "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-apollo-rust-best-practices"
 test ! -e "$TMP/hcom-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
+
+mkdir -p "$TMP/shared-home"
+HCOM_TEST_LOG="$TMP/shared.log" \
+PATH="$TMP/hcom-bin:/usr/bin:/bin" \
+HOME="$TMP/shared-home" \
+XDG_CONFIG_HOME="$TMP/shared-home/.config" \
+CODEX_HOME="$TMP/shared-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/shared-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/shared-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+AICLI_ULTIMATE_LSP=0 \
+AICLI_ULTIMATE_TARGETS=codex,opencode \
+SHELL=/bin/bash \
+  "$ROOT/install.sh" >"$TMP/shared.out"
+test -f "$TMP/shared-home/.agents/skills/orquestrator-hcom/SKILL.md"
+grep -q '^codex_skills=shared$' "$TMP/shared-home/.config/aicli-ultimate/modes"
+! grep -Eq '^plugin add (caveman|ponytail|centaury-workflow|orquestrator|apollo-rust-best-practices)@aicli-ultimate$' "$TMP/shared.log"
+! grep -q '^plugin marketplace add ' "$TMP/shared.log"
+grep -Fq 'Codex diagnostics: aicli-ultimate --doctor' "$TMP/shared.out"
+grep -Fq 'use `$orquestrator-hcom`' "$TMP/shared.out"
+grep -Fq '`/orchestration` is not a Codex command' "$TMP/shared.out"
+
+mkdir -p "$TMP/legacy-home/.config/aicli-ultimate/native-plugins"
+touch "$TMP/legacy-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
+HCOM_TEST_LOG="$TMP/legacy.log" \
+CODEX_LEGACY=1 \
+PATH="$TMP/hcom-bin:/usr/bin:/bin" \
+HOME="$TMP/legacy-home" \
+XDG_CONFIG_HOME="$TMP/legacy-home/.config" \
+CODEX_HOME="$TMP/legacy-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/legacy-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/legacy-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+AICLI_ULTIMATE_LSP=0 \
+AICLI_ULTIMATE_TARGETS=codex,opencode \
+SHELL=/bin/bash \
+  "$ROOT/install.sh" >/dev/null
+for plugin in caveman ponytail centaury-workflow orquestrator apollo-rust-best-practices; do
+  grep -qx "plugin remove $plugin@aicli-ultimate" "$TMP/legacy.log"
+done
+grep -qx 'plugin marketplace remove aicli-ultimate' "$TMP/legacy.log"
+test ! -e "$TMP/legacy-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
 
 mkdir -p "$TMP/preinstalled-home"
 HCOM_TEST_LOG="$TMP/preinstalled.log" \

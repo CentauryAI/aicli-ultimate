@@ -2,11 +2,42 @@
 set -euo pipefail
 
 real_codex="${CODEX_REAL_BIN:-$(command -v codex || true)}"
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 config_root="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
 tmux_config="$config_root/tmux.conf"
 mode_file="$config_root/modes"
 profile="${AICLI_ULTIMATE_PROFILE:-aicli-ultimate}"
 profile_args=(--profile "$profile")
+
+doctor() {
+  local value missing=()
+  printf 'AI CLI Ultimate / Codex\n'
+  [[ -f "$CODEX_HOME/aicli-ultimate.config.toml" ]] \
+    && printf '  profile: installed\n' || printf '  profile: missing\n'
+  [[ -f "$CODEX_HOME/themes/midnight-blue.tmTheme" ]] \
+    && printf '  theme: installed (restart Codex after changes)\n' || printf '  theme: missing\n'
+  value="$(sed -n 's/^statusline=//p' "$mode_file" 2>/dev/null | head -1)"
+  if [[ "$value" == enabled ]] && command -v tmux >/dev/null 2>&1; then
+    printf '  statusline: Powerline enabled\n'
+  elif [[ "$value" == enabled ]]; then
+    printf '  statusline: blocked (tmux missing)\n'
+  elif grep -q '^status_line[[:space:]]*=' "$CODEX_HOME/aicli-ultimate.config.toml" 2>/dev/null; then
+    printf '  statusline: native Codex fallback enabled\n'
+  else
+    printf '  statusline: disabled\n'
+  fi
+  for value in jq sqlite3 git; do command -v "$value" >/dev/null 2>&1 || missing+=("$value"); done
+  ((${#missing[@]})) \
+    && printf '  optional metrics: limited (missing: %s)\n' "${missing[*]}" \
+    || printf '  optional metrics: full\n'
+  value="$(sed -n 's/^codex_skills=//p' "$mode_file" 2>/dev/null | head -1)"
+  printf '  bundled skills: %s\n' "${value:-unknown}"
+}
+
+if [[ "${1:-}" == --doctor ]]; then
+  doctor
+  exit 0
+fi
 
 for argument in "$@"; do
   case "$argument" in

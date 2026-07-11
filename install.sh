@@ -316,7 +316,12 @@ report_orquestrator() {
   local tool enabled skilldir hook skill
   for tool in codex claude opencode omp antigravity; do
     case "$tool" in
-      codex) enabled="$TARGET_CODEX"; skilldir="" ;;
+      codex)
+        enabled="$TARGET_CODEX"
+        [[ "$CODEX_SHARED_SKILLS" == 1 ]] \
+          && skilldir="$HOME/.agents/skills/orquestrator-hcom" \
+          || skilldir="native"
+        ;;
       claude) enabled="$TARGET_CLAUDE"; skilldir="$HOME/.claude/skills/orquestrator-hcom" ;;
       opencode) enabled="$TARGET_OPENCODE"; skilldir="$HOME/.agents/skills/orquestrator-hcom" ;;
       omp) enabled="$TARGET_OMP"; skilldir="$HOME/.agents/skills/orquestrator-hcom" ;;
@@ -325,8 +330,9 @@ report_orquestrator() {
     esac
     [[ "$enabled" == 1 ]] || continue
     hcom_hook_installed "$tool" && hook="✓" || hook="✗"
-    if [[ -z "$skilldir" ]]; then
-      skill="native plugin"
+    if [[ "$skilldir" == native ]]; then
+      codex plugin list 2>/dev/null | grep -Eq '^orquestrator@aicli-ultimate[[:space:]]+installed' \
+        && skill="✓ native plugin" || skill="✗ native plugin"
     elif [[ -d "$skilldir" ]]; then
       skill="✓"
     else
@@ -827,10 +833,14 @@ configure_centaury_guard() {
 }
 
 install_plugin() {
-  local plugin="$1" required="${2:-1}" ownership_marker="${3:-}" plugin_list
+  local plugin="$1" required="${2:-1}" ownership_marker="${3:-}" adopt="${4:-0}" plugin_list
   plugin_list="$(codex plugin list 2>/dev/null || true)"
   if grep -Eq "^${plugin//./\.}[[:space:]]+installed" <<<"$plugin_list"; then
     info "Plugin already installed: $plugin"
+    if [[ "$adopt" == 1 && -n "$ownership_marker" ]]; then
+      mkdir -p "$(dirname "$ownership_marker")"
+      touch "$ownership_marker"
+    fi
   elif ! codex plugin add "$plugin"; then
     if [[ "$required" == 1 ]]; then
       die "failed to install required plugin: $plugin"
@@ -839,6 +849,38 @@ install_plugin() {
   elif [[ -n "$ownership_marker" ]]; then
     mkdir -p "$(dirname "$ownership_marker")"
     touch "$ownership_marker"
+  fi
+}
+
+remove_owned_codex_plugins_for_shared_skills() {
+  local marker_dir="$CONFIG_HOME/native-plugins" marketplace_marker plugin marker plugin_list failed=0
+  marketplace_marker="$marker_dir/codex-marketplace-aicli-ultimate"
+  plugin_list="$(codex plugin list 2>/dev/null || true)"
+  [[ -f "$marketplace_marker" ]] || {
+    if grep -Eq '^(caveman|ponytail|centaury-workflow|orquestrator|apollo-rust-best-practices)@aicli-ultimate[[:space:]]+installed' <<<"$plugin_list"; then
+      warn "Keeping unowned Codex plugins; duplicate bundled skills may remain until they are removed manually."
+    fi
+    return 0
+  }
+  for plugin in caveman ponytail centaury-workflow orquestrator apollo-rust-best-practices; do
+    marker="$marker_dir/codex-$plugin"
+    [[ "$plugin" == apollo-rust-best-practices ]] \
+      && marker="$marker_dir/codex-apollo-rust-best-practices"
+    if grep -Eq "^$plugin@aicli-ultimate[[:space:]]+installed" <<<"$plugin_list"; then
+      if codex plugin remove "$plugin@aicli-ultimate"; then
+        rm -f "$marker"
+      else
+        warn "Could not remove owned Codex plugin: $plugin@aicli-ultimate"
+        failed=1
+      fi
+    else
+      rm -f "$marker"
+    fi
+  done
+  if [[ "$failed" == 0 ]]; then
+    codex plugin marketplace remove aicli-ultimate \
+      && rm -f "$marketplace_marker" \
+      || warn "Could not remove the owned Codex marketplace."
   fi
 }
 
@@ -1052,6 +1094,10 @@ if [[ "$TUI_DONE" != 1 ]]; then
 fi
 [[ "$EFFORT" =~ ^(xhigh|high|medium)$ ]] || die "invalid reasoning effort: $EFFORT"
 [[ "$TARGET_CODEX" == 1 && "$DRY_RUN" != 1 ]] && install_codex_if_missing
+CODEX_SHARED_SKILLS=0
+if [[ "$TARGET_CODEX" == 1 && ( "$TARGET_OPENCODE" == 1 || "$TARGET_OMP" == 1 ) ]]; then
+  CODEX_SHARED_SKILLS=1
+fi
 CODEX_POWERLINE=0
 if [[ "$STATUSLINE" == 1 && "$TARGET_CODEX" == 1 ]] && command -v tmux >/dev/null 2>&1; then
   CODEX_POWERLINE=1
@@ -1265,13 +1311,13 @@ step "Native mode plugins"
 install_native_mode_plugins
 step "Orquestrator (HCOM)"
 configure_hcom
-report_orquestrator
 
-printf 'statusline=%s\nlsp=%s\ncaveman=%s\nponytail=%s\n' \
+printf 'statusline=%s\nlsp=%s\ncaveman=%s\nponytail=%s\ncodex_skills=%s\n' \
   "$([[ "$CODEX_POWERLINE" == 1 ]] && printf enabled || printf disabled)" \
   "$([[ "$LSP" == 1 ]] && printf enabled || printf disabled)" \
   "$([[ "$CAVEMAN_ALWAYS" == 1 ]] && printf wenyan-ultra || printf off)" \
-  "$([[ "$PONYTAIL_ALWAYS" == 1 ]] && printf full || printf off)" >"$CONFIG_HOME/modes"
+  "$([[ "$PONYTAIL_ALWAYS" == 1 ]] && printf full || printf off)" \
+  "$([[ "$CODEX_SHARED_SKILLS" == 1 ]] && printf shared || printf native)" >"$CONFIG_HOME/modes"
 
 if [[ "$TARGET_CODEX" == 1 ]]; then
   sed "s|@STATUS_COMMAND@|$BIN_DIR/aicli-ultimate-status|g" \
@@ -1305,18 +1351,33 @@ fi
 
 if [[ "$OFFLINE" != 1 && "$TARGET_CODEX" == 1 ]]; then
   codex_marker_dir="$CONFIG_HOME/native-plugins"
-  marketplace_list="$(codex plugin marketplace list 2>/dev/null || true)"
-  if ! awk '{print $1}' <<<"$marketplace_list" | grep -qx aicli-ultimate; then
-    codex plugin marketplace add "$INSTALL_DIR"
-    mkdir -p "$codex_marker_dir"
-    touch "$codex_marker_dir/codex-marketplace-aicli-ultimate"
+  if [[ "$CODEX_SHARED_SKILLS" == 1 ]]; then
+    remove_owned_codex_plugins_for_shared_skills
+    info "Codex uses the shared bundled skills in $HOME/.agents/skills (one copy)."
+  else
+    marketplace_list="$(codex plugin marketplace list 2>/dev/null || true)"
+    if ! awk '{print $1}' <<<"$marketplace_list" | grep -qx aicli-ultimate; then
+      codex plugin marketplace add "$INSTALL_DIR"
+      mkdir -p "$codex_marker_dir"
+      touch "$codex_marker_dir/codex-marketplace-aicli-ultimate"
+    fi
+    [[ -f "$codex_marker_dir/codex-marketplace-aicli-ultimate" ]] \
+      && codex_adopt_plugins=1 || codex_adopt_plugins=0
+    if [[ "$CAVEMAN" == 1 ]]; then
+      install_plugin caveman@aicli-ultimate 1 "$codex_marker_dir/codex-caveman" "$codex_adopt_plugins"
+    fi
+    if [[ "$PONYTAIL" == 1 ]]; then
+      install_plugin ponytail@aicli-ultimate 1 "$codex_marker_dir/codex-ponytail" "$codex_adopt_plugins"
+    fi
+    if [[ "$CENTAURY" == 1 ]]; then
+      install_plugin centaury-workflow@aicli-ultimate 1 "$codex_marker_dir/codex-centaury-workflow" "$codex_adopt_plugins"
+    fi
+    if [[ "$ORQUESTRATOR" == 1 ]]; then
+      install_plugin orquestrator@aicli-ultimate 1 "$codex_marker_dir/codex-orquestrator" "$codex_adopt_plugins"
+    fi
+    install_plugin apollo-rust-best-practices@aicli-ultimate 1 \
+      "$codex_marker_dir/codex-apollo-rust-best-practices" "$codex_adopt_plugins"
   fi
-  if [[ "$CAVEMAN" == 1 ]]; then install_plugin caveman@aicli-ultimate; fi
-  if [[ "$PONYTAIL" == 1 ]]; then install_plugin ponytail@aicli-ultimate; fi
-  if [[ "$CENTAURY" == 1 ]]; then install_plugin centaury-workflow@aicli-ultimate; fi
-  if [[ "$ORQUESTRATOR" == 1 ]]; then install_plugin orquestrator@aicli-ultimate; fi
-  install_plugin apollo-rust-best-practices@aicli-ultimate 1 \
-    "$codex_marker_dir/codex-apollo-rust-best-practices"
   if [[ "$SUPERPOWERS" == 1 ]]; then install_plugin superpowers@openai-curated 0; fi
   if [[ "$SECURITY" == 1 ]]; then install_plugin codex-security@openai-curated 0; fi
 fi
@@ -1349,6 +1410,8 @@ if [[ "$OFFLINE" != 1 ]] && (( OPTIONAL_SKILLS > 0 )); then
   [[ "$GHFIXCI" == 1 ]] && install_optional_skill openai/skills@gh-fix-ci gh-fix-ci
 fi
 
+report_orquestrator
+
 step "Finalizing"
 prune_orphans
 cat >"$STATE_FILE" <<EOF
@@ -1364,6 +1427,11 @@ cat >"$STATE_FILE" <<EOF
 EOF
 
 printf '\n\033[1;32mAI CLI Ultimate installed.\033[0m\n'
-printf 'Restart your shell, then launch any configured agent.\n'
+printf '\033[1;33mRestart your shell and every configured agent to load this install.\033[0m\n'
 printf 'Skills are available through each agent native skill syntax or natural language.\n'
+if [[ "$TARGET_CODEX" == 1 ]]; then
+  printf 'Codex diagnostics: aicli-ultimate --doctor\n'
+  [[ "$ORQUESTRATOR" == 1 ]] \
+    && printf 'Codex Orquestrator: use `$orquestrator-hcom` or natural language; `/orchestration` is not a Codex command.\n'
+fi
 [[ "$CENTAURY" == 1 ]] && printf 'CentauryAI repositories now block direct commits and pushes to protected branches.\n'

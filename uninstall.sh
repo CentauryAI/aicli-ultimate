@@ -186,17 +186,19 @@ fi
 
 if command -v codex >/dev/null 2>&1; then
   codex_native="$CONFIG_HOME/native-plugins"
-  codex plugin remove caveman@aicli-ultimate 2>/dev/null || true
-  codex plugin remove ponytail@aicli-ultimate 2>/dev/null || true
-  codex plugin remove centaury-workflow@aicli-ultimate 2>/dev/null || true
-  codex plugin remove orquestrator@aicli-ultimate 2>/dev/null || true
-  marker="$codex_native/codex-apollo-rust-best-practices"
-  if [[ -f "$marker" ]]; then
-    remove_owned_integration "$marker" "Codex Apollo Rust plugin" \
-      codex plugin remove apollo-rust-best-practices@aicli-ultimate
-  fi
+  for plugin in caveman ponytail centaury-workflow orquestrator apollo-rust-best-practices; do
+    marker="$codex_native/codex-$plugin"
+    if [[ -f "$marker" ]]; then
+      remove_owned_integration "$marker" "Codex plugin $plugin" \
+      codex plugin remove "$plugin@aicli-ultimate"
+    fi
+  done
+  codex_plugins_remaining=0
+  for plugin in caveman ponytail centaury-workflow orquestrator apollo-rust-best-practices; do
+    [[ -f "$codex_native/codex-$plugin" ]] && codex_plugins_remaining=1
+  done
   marker="$codex_native/codex-marketplace-aicli-ultimate"
-  if [[ -f "$marker" && ! -f "$codex_native/codex-apollo-rust-best-practices" ]]; then
+  if [[ -f "$marker" && "$codex_plugins_remaining" == 0 ]]; then
     remove_owned_integration "$marker" "Codex AI CLI Ultimate marketplace" \
       codex plugin marketplace remove aicli-ultimate
   fi
