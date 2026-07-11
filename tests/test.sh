@@ -48,24 +48,31 @@ XDG_CACHE_HOME="$TMP/status-home/.cache" \
 grep -q 'Codex' "$TMP/status.out"
 test ! -s "$TMP/status.err"
 
-# External tmux Powerline suppresses only its own duplicate native Codex line.
-mkdir -p "$TMP/wrapper-bin" "$TMP/wrapper-home/.config/aicli-ultimate"
+# Direct and HCOM-style PATH launches resolve the same Powerline wrapper.
+mkdir -p "$TMP/wrapper-home/.config/aicli-ultimate/codex-bin" \
+  "$TMP/wrapper-real-bin" "$TMP/wrapper-bin"
+cp "$ROOT/statusline/codex-powerline" \
+  "$TMP/wrapper-home/.config/aicli-ultimate/codex-bin/codex"
+cp "$ROOT/statusline/codex-powerline" "$TMP/wrapper-bin/aicli-ultimate"
 printf 'statusline=enabled\n' >"$TMP/wrapper-home/.config/aicli-ultimate/modes"
 : >"$TMP/wrapper-home/.config/aicli-ultimate/tmux.conf"
 printf '%s\n' \
   '#!/bin/sh' \
-  'printf "%s\n" "$@" >"$CODEX_ARGS_LOG"' >"$TMP/wrapper-bin/codex-real"
+  'printf "%s\n" "$0" "$@" >"$CODEX_ARGS_LOG"' >"$TMP/wrapper-real-bin/codex"
 printf '%s\n' \
   '#!/bin/bash' \
   'for command; do :; done' \
   'exec /bin/bash -c "$command"' >"$TMP/wrapper-bin/tmux"
-chmod +x "$TMP/wrapper-bin/codex-real" "$TMP/wrapper-bin/tmux"
+chmod +x "$TMP/wrapper-home/.config/aicli-ultimate/codex-bin/codex" \
+  "$TMP/wrapper-bin/aicli-ultimate" "$TMP/wrapper-real-bin/codex" "$TMP/wrapper-bin/tmux"
+wrapper_path="$TMP/wrapper-home/.config/aicli-ultimate/codex-bin:$TMP/wrapper-real-bin:$TMP/wrapper-bin:/usr/bin:/bin"
+test "$(PATH="$wrapper_path" command -v codex)" = \
+  "$TMP/wrapper-home/.config/aicli-ultimate/codex-bin/codex"
 HOME="$TMP/wrapper-home" \
 XDG_CONFIG_HOME="$TMP/wrapper-home/.config" \
-CODEX_REAL_BIN="$TMP/wrapper-bin/codex-real" \
 CODEX_ARGS_LOG="$TMP/codex-args.log" \
-PATH="$TMP/wrapper-bin:/usr/bin:/bin" \
-  python3 - "$ROOT/statusline/codex-powerline" <<'PY'
+PATH="$wrapper_path" \
+  python3 - "$TMP/wrapper-home/.config/aicli-ultimate/codex-bin/codex" <<'PY'
 import errno, os, pty, sys
 
 pid, master = pty.fork()
@@ -82,27 +89,18 @@ while True:
 _, status = os.waitpid(pid, 0)
 raise SystemExit(os.waitstatus_to_exitcode(status))
 PY
+grep -Fqx "$TMP/wrapper-real-bin/codex" "$TMP/codex-args.log"
 grep -qx -- '--profile' "$TMP/codex-args.log"
 grep -qx 'aicli-ultimate' "$TMP/codex-args.log"
 grep -qx -- '-c' "$TMP/codex-args.log"
 grep -Fqx 'tui.status_line=[]' "$TMP/codex-args.log"
-
-# Base Codex fallback preserves existing TUI settings and user status lines.
-printf '[tui]\ntheme = "custom"\n' >"$TMP/codex-config.toml"
-cp "$TMP/codex-config.toml" "$TMP/codex-config.expected"
-python3 "$ROOT/scripts/codex_statusline.py" install \
-  "$TMP/codex-config.toml" "$TMP/codex-statusline-state.json"
-grep -q '^theme = "custom"$' "$TMP/codex-config.toml"
-grep -q '# aicli-ultimate-owned$' "$TMP/codex-config.toml"
-python3 "$ROOT/scripts/codex_statusline.py" restore \
-  "$TMP/codex-config.toml" "$TMP/codex-statusline-state.json"
-cmp "$TMP/codex-config.expected" "$TMP/codex-config.toml"
-printf '[tui]\nstatus_line = ["model"]\n' >"$TMP/codex-config.toml"
-cp "$TMP/codex-config.toml" "$TMP/codex-config.expected"
-python3 "$ROOT/scripts/codex_statusline.py" install \
-  "$TMP/codex-config.toml" "$TMP/codex-statusline-state.json"
-cmp "$TMP/codex-config.expected" "$TMP/codex-config.toml"
-test ! -e "$TMP/codex-statusline-state.json"
+HOME="$TMP/wrapper-home" \
+XDG_CONFIG_HOME="$TMP/wrapper-home/.config" \
+CODEX_ARGS_LOG="$TMP/codex-args.log" \
+PATH="$wrapper_path" \
+  "$TMP/wrapper-bin/aicli-ultimate" --version
+grep -Fqx "$TMP/wrapper-real-bin/codex" "$TMP/codex-args.log"
+grep -qx -- '--version' "$TMP/codex-args.log"
 
 python3 -m py_compile "$ROOT/scripts/"*.py
 python3 -m json.tool "$ROOT/.claude-plugin/marketplace.json" >/dev/null
@@ -146,6 +144,9 @@ for manifest in "$ROOT"/plugins/*/.codex-plugin/plugin.json; do
 done
 
 mkdir -p "$TMP/home/.claude" "$TMP/home/.codex/agents" "$TMP/home/.config/opencode" "$TMP/home/.gemini/antigravity-cli"
+printf '[tui]\ntheme = "custom"\n' >"$TMP/home/.codex/config.toml"
+python3 "$ROOT/scripts/codex_statusline.py" install \
+  "$TMP/home/.codex/config.toml" "$TMP/home/.config/aicli-ultimate/codex-statusline-state.json"
 printf 'description = ""\nmodel = "test"\n' >"$TMP/home/.codex/agents/planner.toml"
 printf 'name = ""\ndescription = "Keep custom description."\n' \
   >"$TMP/home/.codex/agents/researcher.toml"
@@ -171,15 +172,16 @@ SHELL=/bin/bash \
   "$ROOT/install.sh" >/dev/null
 
 test -x "$TMP/home/.local/bin/aicli-ultimate"
+test -x "$TMP/home/.config/aicli-ultimate/codex-bin/codex"
+test -f "$TMP/home/.config/aicli-ultimate/codex-bin/codex.aicli-ultimate-owned"
 test -x "$TMP/home/.local/bin/aicli-ultimate-status"
 test -x "$TMP/home/.local/bin/claude-ultimate-status"
 test -x "$TMP/home/.local/bin/antigravity-ultimate-status"
 grep -q -- '--profile' "$TMP/home/.local/bin/aicli-ultimate"
 grep -q 'model_reasoning_effort = "xhigh"' "$TMP/home/.codex/aicli-ultimate.config.toml"
-grep -Fq 'status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-remaining", "five-hour-limit", "weekly-limit"]' \
-  "$TMP/home/.codex/aicli-ultimate.config.toml"
-grep -Fq 'status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-remaining", "five-hour-limit", "weekly-limit"] # aicli-ultimate-owned' \
-  "$TMP/home/.codex/config.toml"
+grep -q '^theme = "custom"$' "$TMP/home/.codex/config.toml"
+! grep -q '^status_line' "$TMP/home/.codex/config.toml"
+test ! -e "$TMP/home/.config/aicli-ultimate/codex-statusline-state.json"
 grep -q '^\[mcp_servers.aicli_lsp\]$' "$TMP/home/.codex/aicli-ultimate.config.toml"
 grep -q '^enabled = true$' "$TMP/home/.codex/aicli-ultimate.config.toml"
 grep -q '"get_completions"' "$TMP/home/.codex/aicli-ultimate.config.toml"
@@ -306,7 +308,9 @@ grep -q '^bind-key -T root WheelUpPane copy-mode -e$' "$TMP/home/.config/aicli-u
 ! grep -q "alias omp=" "$TMP/home/.bashrc"
 ! grep -q "alias agy=" "$TMP/home/.bashrc"
 grep -q '^export OPENCODE_EXPERIMENTAL_LSP_TOOL=true$' "$TMP/home/.bashrc"
-grep -Fq "export PATH=\"$TMP/home/.local/bin:\$PATH\"" "$TMP/home/.bashrc"
+grep -Fq "export PATH=\"$TMP/home/.config/aicli-ultimate/codex-bin:$TMP/home/.local/bin:\$PATH\"" \
+  "$TMP/home/.bashrc"
+! grep -q "alias codex=" "$TMP/home/.bashrc"
 grep -q '^lsp=enabled$' "$TMP/home/.config/aicli-ultimate/modes"
 grep -q '^codex_skills=shared$' "$TMP/home/.config/aicli-ultimate/modes"
 grep -q 'Prefer native LSP tools' "$TMP/home/.codex/AGENTS.md"
@@ -386,7 +390,9 @@ test ! -e "$TMP/home/.omp/agent/extensions/aicli-ultimate-statusline.ts"
 test ! -e "$TMP/home/.config/aicli-ultimate/mcpls.toml"
 test ! -e "$TMP/home/.claude/skills/rust-best-practices"
 test ! -e "$TMP/home/.agents/skills/rust-best-practices"
-test ! -e "$TMP/home/.codex/config.toml"
+grep -q '^theme = "custom"$' "$TMP/home/.codex/config.toml"
+! grep -q '^status_line' "$TMP/home/.codex/config.toml"
+test ! -e "$TMP/home/.config/aicli-ultimate/codex-bin/codex"
 
 mkdir -p "$TMP/no-lsp-home"
 HOME="$TMP/no-lsp-home" \

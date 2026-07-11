@@ -5,6 +5,7 @@ CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
 INSTALL_DIR="${AICLI_ULTIMATE_INSTALL_DIR:-$HOME/.local/share/aicli-ultimate}"
 BIN_DIR="${AICLI_ULTIMATE_BIN_DIR:-$HOME/.local/bin}"
+CODEX_SHIM="$CONFIG_HOME/codex-bin/codex"
 NONINTERACTIVE="${AICLI_ULTIMATE_NONINTERACTIVE:-0}"
 
 ask() {
@@ -283,6 +284,8 @@ if [[ -e "$HOME/.gemini/config/plugins/aicli-ultimate/.aicli-ultimate-owned" ]];
   rm -rf "$HOME/.gemini/config/plugins/aicli-ultimate"
 fi
 remove_generated_file "$BIN_DIR/aicli-ultimate" "$INSTALL_DIR/statusline/codex-powerline"
+remove_generated_file "$CODEX_SHIM" "$INSTALL_DIR/statusline/codex-powerline"
+rmdir "$(dirname "$CODEX_SHIM")" 2>/dev/null || true
 remove_generated_file "$BIN_DIR/aicli-ultimate-status" "$INSTALL_DIR/statusline/codex-powerline-status"
 remove_generated_file "$BIN_DIR/claude-ultimate-status" "$INSTALL_DIR/statusline/claude-powerline-status"
 remove_generated_file "$BIN_DIR/aicli-agent-status" "$INSTALL_DIR/statusline/aicli-agent-status"

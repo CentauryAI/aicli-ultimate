@@ -1,13 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-real_codex="${CODEX_REAL_BIN:-$(command -v codex || true)}"
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 config_root="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
+codex_shim="$config_root/codex-bin/codex"
 tmux_config="$config_root/tmux.conf"
 mode_file="$config_root/modes"
 profile="${AICLI_ULTIMATE_PROFILE:-aicli-ultimate}"
 profile_args=(--profile "$profile")
+
+resolve_real_codex() {
+  local candidate
+  if [[ -n "${CODEX_REAL_BIN:-}" ]]; then
+    printf '%s\n' "$CODEX_REAL_BIN"
+    return
+  fi
+  while IFS= read -r candidate; do
+    [[ -e "$candidate" && "$candidate" -ef "$0" ]] && continue
+    [[ -e "$codex_shim" && "$candidate" -ef "$codex_shim" ]] && continue
+    printf '%s\n' "$candidate"
+    return
+  done < <(type -aP codex 2>/dev/null || true)
+}
+
+real_codex="$(resolve_real_codex)"
 
 doctor() {
   local value missing=()
