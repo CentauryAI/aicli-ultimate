@@ -30,9 +30,10 @@ Existing files are copied to `~/.config/aicli-ultimate/backups/<timestamp>` befo
 ### Non-interactive install
 
 ```bash
-AICLI_ULTIMATE_NONINTERACTIVE=1 \
-AICLI_ULTIMATE_TARGETS=codex,claude,opencode,omp,antigravity \
-  curl -fsSL https://raw.githubusercontent.com/CentauryAI/aicli-ultimate/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/CentauryAI/aicli-ultimate/main/install.sh | \
+  AICLI_ULTIMATE_NONINTERACTIVE=1 \
+  AICLI_ULTIMATE_TARGETS=codex,claude,opencode,omp,antigravity \
+  bash
 ```
 
 `AICLI_ULTIMATE_TARGETS` accepts any comma-separated subset of `codex`, `claude`, `opencode`, `omp`, and `antigravity`. See the complete settings table below. `AICLI_ULTIMATE_DRY_RUN=1` prints the selection plan and exits without installing or changing user configuration; a development checkout may still compile its local setup TUI before the plan is printed.
@@ -65,7 +66,7 @@ Supported environment settings:
 | `AICLI_ULTIMATE_NONINTERACTIVE` | `0` | With `1`, accepts default answers; core features stay on and optional skills stay off. |
 | `AICLI_ULTIMATE_LSP` | Interactive/default on | Forces LSP setup with `0` or `1`. |
 | `AICLI_ULTIMATE_EFFORT` | `xhigh` | Codex reasoning effort: `xhigh`, `high`, or `medium`. |
-| `AICLI_ULTIMATE_REF` | `main` | Pins source to a branch or release tag such as `v0.4.0`. |
+| `AICLI_ULTIMATE_REF` | `main` | Pins source to a branch or release tag such as `v0.4.1`. |
 | `AICLI_ULTIMATE_OFFLINE` | `0` | With `1`, skips post-download dependency fetches, native plugin changes, and optional skills; it does not remove the initial download needed by a piped install. |
 | `AICLI_ULTIMATE_DRY_RUN` | `0` | With `1`, prints the resolved plan and makes no changes. |
 | `AICLI_ULTIMATE_REPO` | `CentauryAI/aicli-ultimate` | Overrides the source repository for forks/testing. |
@@ -77,7 +78,7 @@ There are no hidden non-interactive variables for every checklist toggle. Rerun 
 
 ### Releases and versioning
 
-Git semver tags are the release version source. The release workflow writes the tag (for example `v0.4.0`) into the packaged `VERSION` file, builds platform TUI binaries, and publishes the bundle. Pin a deployment with `AICLI_ULTIMATE_REF=v0.4.0`; omit it to install the latest published release with a `main` fallback.
+Git semver tags are the release version source. The release workflow writes the tag (for example `v0.4.1`) into the packaged `VERSION` file, builds platform TUI binaries, and publishes the bundle. Pin a deployment with `AICLI_ULTIMATE_REF=v0.4.1`; omit it to install the latest published release with a `main` fallback.
 
 ## Native adapters
 
