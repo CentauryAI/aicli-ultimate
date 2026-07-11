@@ -11,10 +11,34 @@ Coordinate work. Do not implement code in this thread while mode is active.
 
 1. Run `hcom status`, then `hcom list`.
 2. If no suitable agents exist, ask user before spawning new external agents.
-3. Create one thread id for workflow and pass `--thread <id>` to every message.
-4. State active agents, task split, and merge owner to user.
+3. State active agents, task split, and merge owner to user.
 
 Use current `hcom` commands. Delegation and monitoring are through hcom.
+
+## Tool-aware routing
+
+Before every delegation, read `hcom list --json`. HCOM reports each live agent's `name`, `tool`, `status`, and `description`; it does not report the model actually configured behind the tool. Treat these model names as this installation's expected profiles, never as runtime detection.
+
+| Tool | Expected model | Priority and fit | Do not use for |
+| --- | --- | --- | --- |
+| `claude` | DeepSeek V4 Flash | First choice for cheap, fast, simple, repetitive, or bulk work: renames, mechanical edits, small functions, and straightforward implementations. | Images, visual work, or complex/high-risk reasoning. |
+| `omp` | MiniMax M3 | Cheap choice for easy-to-moderate agentic work, long context, and multimodal input. Good fallback for Claude or OpenCode. | Highest-risk security or architecture decisions. |
+| `opencode` | Qwen 3.7 Plus | Moderate-to-complex implementation needing more reasoning than Claude, including multimodal input. | Work that clearly requires maximum-quality security or backend reasoning. |
+| `antigravity` | Gemini 3.5 Flash | Frontend, visual, multimodal, image-input, and image-generation tasks. | Backend-only work better handled more cheaply elsewhere. |
+| `codex` | GPT-5.6 Sol | Maximum-quality research, planning, difficult backend, optimization, security analysis, and hard final review. | Frontend work. |
+
+Unknown tools have no default capability. Use them only when their live `description` explicitly matches the task.
+
+### Selection order
+
+1. Apply hard exclusions first. Never send image work to Claude or frontend work to Codex.
+2. Match required capability and domain. A matching specialist `description` breaks ties but never overrides a hard exclusion.
+3. Match complexity: simple/bulk -> Claude; easy-to-moderate or long-context -> OMP; moderate-to-complex -> OpenCode; frontend/visual -> Antigravity; complex/high-risk backend, research, planning, optimization, or security -> Codex.
+4. Among valid matches, prefer `listening` over `active`; never assign to `blocked` or stale agents.
+5. Among equally valid idle agents, choose the cheapest/fastest profile: Claude, OMP, OpenCode, Antigravity, then Codex.
+6. If the preferred tool is unavailable, use only a compatible fallback and state the quality, cost, or modality tradeoff. If no compatible live agent exists, ask before spawning one.
+
+Examples: bulk project rename -> Claude; ordinary API implementation -> OMP or OpenCode according to complexity; screenshot-driven UI -> Antigravity; authentication threat review -> Codex. Split mixed tasks so frontend goes to Antigravity and complex backend/security goes to Codex.
 
 ## Contract
 
@@ -22,7 +46,6 @@ Use current `hcom` commands. Delegation and monitoring are through hcom.
 - Use terminal only for hcom, read-only inspection, Git coordination, and verification.
 - Never edit implementation files in orchestrator thread.
 - Never hardcode agent names. Read names from `hcom list` or launch output.
-- Use `--intent inform` for status, `request` only when reply required, `ack` for receipt.
 - Monitor with `hcom events`; read full transcripts only when evidence is needed.
 - Kill coordinator-owned agents when work completes. Never kill pre-existing agents.
 
@@ -41,10 +64,10 @@ For CentauryAI repositories, obey protected-branch policy: `ai/<task>-<id>` bran
 ## Messaging
 
 ```bash
-hcom send @worker --thread "$thread" --intent request -- \
+hcom send @worker -- \
   'task: <bounded task>. files: <paths>. acceptance: <checks>. report exact failures.'
 
-hcom send @reviewer --thread "$thread" --intent request -- \
+hcom send @reviewer -- \
   'review branch <branch> against <acceptance>. read-only. report file:line defects.'
 ```
 
