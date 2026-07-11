@@ -286,6 +286,75 @@ except (OSError, ValueError, TypeError):
 ' "$tool" | grep -qx True
 }
 
+hcom_codex_args() {
+  "$HCOM_BIN" config --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    print(json.load(sys.stdin).get("HCOM_CODEX_ARGS", ""))
+except (ValueError, TypeError):
+    raise SystemExit(1)
+'
+}
+
+configure_hcom_codex_profile() {
+  local state="$CONFIG_HOME/hcom-codex-args.json" current installed profile_state
+  [[ "$TARGET_CODEX" == 1 ]] || return 0
+  if ! current="$(hcom_codex_args)"; then
+    warn "Could not inspect HCOM codex_args; keeping them unchanged."
+    return 0
+  fi
+  if [[ -f "$state" ]]; then
+    if ! installed="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["installed_value"])' "$state" 2>/dev/null)"; then
+      warn "Could not read saved HCOM codex_args state; keeping current args."
+      return 0
+    fi
+    if [[ "$current" == "$installed" ]]; then
+      info "HCOM Codex profile args already configured."
+    else
+      warn "Keeping HCOM codex_args changed after AI CLI Ultimate configured them."
+    fi
+    return 0
+  fi
+  profile_state="$(python3 - "$current" <<'PY'
+import shlex, sys
+try:
+    args = shlex.split(sys.argv[1])
+except ValueError:
+    print("invalid")
+    raise SystemExit
+for index, arg in enumerate(args):
+    if arg == "--profile" or arg == "-p":
+        value = args[index + 1] if index + 1 < len(args) else ""
+        print("aicli" if value == "aicli-ultimate" else "other")
+        break
+    if arg.startswith("--profile="):
+        print("aicli" if arg.split("=", 1)[1] == "aicli-ultimate" else "other")
+        break
+else:
+    print("none")
+PY
+)"
+  case "$profile_state" in
+    aicli) info "HCOM Codex profile args already configured."; return 0 ;;
+    other) warn "Keeping the existing HCOM Codex profile in codex_args."; return 0 ;;
+    invalid) warn "Could not parse existing HCOM codex_args; keeping them unchanged."; return 0 ;;
+  esac
+  installed="${current:+$current }--profile aicli-ultimate"
+  if "$HCOM_BIN" config codex_args "$installed"; then
+    mkdir -p "$(dirname "$state")"
+    python3 - "$state" "$current" "$installed" <<'PY'
+import json, pathlib, sys
+pathlib.Path(sys.argv[1]).write_text(json.dumps({
+    "existed": bool(sys.argv[2]),
+    "value": sys.argv[2],
+    "installed_value": sys.argv[3],
+}) + "\n")
+PY
+  else
+    warn "Could not configure HCOM Codex profile args."
+  fi
+}
+
 configure_hcom() {
   local tool enabled marker_dir="$CONFIG_HOME/hcom-hooks"
   [[ "$ORQUESTRATOR" == 1 && "$OFFLINE" != 1 ]] || return 0
@@ -308,6 +377,7 @@ configure_hcom() {
       warn "Could not install HCOM hooks for $tool; use hcom start for ad-hoc mode."
     fi
   done
+  configure_hcom_codex_profile
 }
 
 report_orquestrator() {
@@ -1433,5 +1503,8 @@ if [[ "$TARGET_CODEX" == 1 ]]; then
   printf 'Codex diagnostics: aicli-ultimate --doctor\n'
   [[ "$ORQUESTRATOR" == 1 ]] \
     && printf 'Codex Orquestrator: use `$orquestrator-hcom` or natural language; `/orchestration` is not a Codex command.\n'
+  if [[ "$ORQUESTRATOR" == 1 ]]; then
+    printf 'HCOM Codex: profile args configured when no user profile exists. HCOM 0.7.23 has no executable override, so `hcom codex` cannot use external Powerline; launch `codex`/`aicli-ultimate` for Powerline.\n'
+  fi
 fi
 [[ "$CENTAURY" == 1 ]] && printf 'CentauryAI repositories now block direct commits and pushes to protected branches.\n'
