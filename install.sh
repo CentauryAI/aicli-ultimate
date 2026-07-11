@@ -233,6 +233,50 @@ install_codex_if_missing() {
   [[ "$OFFLINE" == 1 ]] || npm install -g @openai/codex
 }
 
+run_as_root() {
+  if [[ "$EUID" == 0 ]]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    warn "Cannot install tmux automatically without root access or sudo."
+    return 1
+  fi
+}
+
+install_tmux_if_missing() {
+  local manager=""
+  command -v tmux >/dev/null 2>&1 && return 0
+  [[ "$OFFLINE" != 1 ]] || return 1
+
+  if [[ "$(uname -s)" == Darwin ]] && command -v brew >/dev/null 2>&1; then
+    manager=brew
+  else
+    for manager in apt-get dnf yum pacman zypper apk brew; do
+      command -v "$manager" >/dev/null 2>&1 && break
+      manager=""
+    done
+  fi
+  if [[ -z "$manager" ]]; then
+    warn "Cannot install tmux automatically: no supported package manager found."
+    return 1
+  fi
+
+  info "Installing tmux for the Codex Powerline"
+  case "$manager" in
+    apt-get)
+      run_as_root env DEBIAN_FRONTEND=noninteractive apt-get update \
+        && run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y tmux
+      ;;
+    dnf|yum) run_as_root "$manager" install -y tmux ;;
+    pacman) run_as_root pacman -S --needed --noconfirm tmux ;;
+    zypper) run_as_root zypper --non-interactive install tmux ;;
+    apk) run_as_root apk add tmux ;;
+    brew) brew install tmux ;;
+  esac || return 1
+  command -v tmux >/dev/null 2>&1
+}
+
 backup_file() {
   local file="$1" backup="$2"
   [[ -e "$file" ]] || return 0
@@ -985,6 +1029,9 @@ if [[ "$TUI_DONE" != 1 ]]; then
 fi
 [[ "$EFFORT" =~ ^(xhigh|high|medium)$ ]] || die "invalid reasoning effort: $EFFORT"
 [[ "$TARGET_CODEX" == 1 && "$DRY_RUN" != 1 ]] && install_codex_if_missing
+if [[ "$STATUSLINE" == 1 && "$TARGET_CODEX" == 1 && "$DRY_RUN" != 1 ]]; then
+  install_tmux_if_missing || true
+fi
 CODEX_SHARED_SKILLS=0
 if [[ "$TARGET_CODEX" == 1 && ( "$TARGET_OPENCODE" == 1 || "$TARGET_OMP" == 1 ) ]]; then
   CODEX_SHARED_SKILLS=1
