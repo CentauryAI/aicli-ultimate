@@ -78,16 +78,45 @@ def restore_value(path: Path, keys: list[str], expected: object, state: Path) ->
     write(path, data)
 
 
+def migrate_value(
+    path: Path, keys: list[str], old: object, new: object, state: Path
+) -> None:
+    """Accept an application-normalized installed value without losing history."""
+    if not path.exists() or not state.exists():
+        return
+    data = load_object(path)
+    parent = parent_for(data, keys, create=False)
+    saved = json.loads(state.read_text())
+    if parent is None or parent.get(keys[-1]) != new:
+        return
+    if saved.get("installed_value") == old:
+        saved["installed_value"] = new
+        state.write_text(json.dumps(saved, indent=2) + "\n")
+
+
 def main() -> None:
-    if len(sys.argv) != 6 or sys.argv[1] not in {"set", "restore"}:
+    if len(sys.argv) < 6 or sys.argv[1] not in {"set", "restore", "migrate"}:
         raise SystemExit(
-            "usage: json_override.py set|restore FILE DOT_PATH VALUE_JSON STATE_FILE"
+            "usage: json_override.py set|restore FILE DOT_PATH VALUE_JSON STATE_FILE\n"
+            "       json_override.py migrate FILE DOT_PATH OLD_JSON NEW_JSON STATE_FILE"
         )
     action = sys.argv[1]
     path = Path(sys.argv[2])
     keys = sys.argv[3].split(".")
-    value = json.loads(sys.argv[4])
-    state = Path(sys.argv[5])
+    if action == "migrate":
+        if len(sys.argv) != 7:
+            raise SystemExit("migrate requires OLD_JSON NEW_JSON STATE_FILE")
+        migrate_value(
+            path,
+            keys,
+            json.loads(sys.argv[4]),
+            json.loads(sys.argv[5]),
+            Path(sys.argv[6]),
+        )
+        return
+    if len(sys.argv) != 6:
+        raise SystemExit("set/restore require VALUE_JSON STATE_FILE")
+    value, state = json.loads(sys.argv[4]), Path(sys.argv[5])
     if action == "set":
         set_value(path, keys, value, state)
     else:

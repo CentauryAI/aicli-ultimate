@@ -11,6 +11,14 @@ done
 
 python3 -m py_compile "$ROOT/scripts/"*.py
 
+printf '{"statusLine":{"type":"","command":"status","enabled":true}}\n' >"$TMP/normalized.json"
+printf '{"existed":false,"value":null,"installed_value":{"command":"status","enabled":true,"stack_with_default":false}}\n' >"$TMP/normalized-state.json"
+python3 "$ROOT/scripts/json_override.py" migrate "$TMP/normalized.json" statusLine \
+  '{"command":"status","enabled":true,"stack_with_default":false}' \
+  '{"type":"","command":"status","enabled":true}' "$TMP/normalized-state.json"
+jq -e '.installed_value.type == "" and (.installed_value | has("stack_with_default") | not)' \
+  "$TMP/normalized-state.json" >/dev/null
+
 python3 -m json.tool "$ROOT/.agents/plugins/marketplace.json" >/dev/null
 for manifest in "$ROOT"/plugins/*/.codex-plugin/plugin.json; do
   python3 -m json.tool "$manifest" >/dev/null
@@ -61,7 +69,7 @@ jq -e '(.plugin | length) == 2 and (.plugin[1] | endswith("/aicli-ultimate/statu
 jq -e '.dependencies["@opentui/core"] == "*"' "$TMP/home/.config/opencode/package.json" >/dev/null
 jq -e '.custom == "preserved" and (.statusLine.command | endswith("/claude-ultimate-status"))' \
   "$TMP/home/.claude/settings.json" >/dev/null
-jq -e '.custom == "preserved" and .statusLine.enabled == true and (.statusLine.command | endswith("/antigravity-ultimate-status"))' \
+jq -e '.custom == "preserved" and .statusLine.type == "" and .statusLine.enabled == true and (.statusLine.command | endswith("/antigravity-ultimate-status"))' \
   "$TMP/home/.gemini/antigravity-cli/settings.json" >/dev/null
 grep -q '"name": "aicli-ultimate"' "$TMP/home/.gemini/config/plugins/aicli-ultimate/plugin.json"
 test -f "$TMP/home/.claude/skills/caveman/SKILL.md"

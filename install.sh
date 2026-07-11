@@ -238,10 +238,14 @@ configure_omp_statusline() {
 }
 
 configure_antigravity_statusline() {
-  local settings="$HOME/.gemini/antigravity-cli/settings.json" status_json
-  status_json="$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1],"enabled":True,"stack_with_default":False}))' "$BIN_DIR/antigravity-ultimate-status")"
+  local settings="$HOME/.gemini/antigravity-cli/settings.json" status_json legacy_json state
+  state="$CONFIG_HOME/antigravity-statusline-previous.json"
+  legacy_json="$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1],"enabled":True,"stack_with_default":False}))' "$BIN_DIR/antigravity-ultimate-status")"
+  status_json="$(python3 -c 'import json,sys; print(json.dumps({"type":"","command":sys.argv[1],"enabled":True}))' "$BIN_DIR/antigravity-ultimate-status")"
+  python3 "$ROOT/scripts/json_override.py" migrate "$settings" statusLine \
+    "$legacy_json" "$status_json" "$state"
   if python3 "$ROOT/scripts/json_override.py" set "$settings" statusLine \
-    "$status_json" "$CONFIG_HOME/antigravity-statusline-previous.json"; then
+    "$status_json" "$state"; then
     install_owned_file "$ROOT/statusline/antigravity-powerline" "$BIN_DIR/antigravity-ultimate-status"
   else
     warn "Keeping an Antigravity statusLine changed after AI CLI Ultimate was installed."

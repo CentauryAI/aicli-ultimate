@@ -127,7 +127,7 @@ if [[ -f "$INSTALL_DIR/scripts/json_override.py" ]]; then
   claude_status_json="$(python3 -c 'import json,sys; print(json.dumps({"type":"command","command":sys.argv[1]}))' "$BIN_DIR/claude-ultimate-status")"
   python3 "$INSTALL_DIR/scripts/json_override.py" restore "$HOME/.claude/settings.json" statusLine \
     "$claude_status_json" "$CONFIG_HOME/claude-statusline-previous.json"
-  antigravity_status_json="$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1],"enabled":True,"stack_with_default":False}))' "$BIN_DIR/antigravity-ultimate-status")"
+  antigravity_status_json="$(python3 -c 'import json,sys; print(json.dumps({"type":"","command":sys.argv[1],"enabled":True}))' "$BIN_DIR/antigravity-ultimate-status")"
   python3 "$INSTALL_DIR/scripts/json_override.py" restore \
     "$HOME/.gemini/antigravity-cli/settings.json" statusLine \
     "$antigravity_status_json" "$CONFIG_HOME/antigravity-statusline-previous.json"
