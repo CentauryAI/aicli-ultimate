@@ -255,6 +255,11 @@ fi
 
 remove_skill_set "$HOME/.claude/skills"
 remove_skill_set "$HOME/.agents/skills"
+if [[ -f "$INSTALL_DIR/scripts/codex_statusline.py" ]] \
+  && ! python3 "$INSTALL_DIR/scripts/codex_statusline.py" restore \
+    "$CODEX_HOME/config.toml" "$CONFIG_HOME/codex-statusline-state.json"; then
+  printf 'Preserving Codex status line state; config changed after installation.\n' >&2
+fi
 if [[ -d "$INSTALL_DIR/adapters/claude/agents" ]]; then
   for file in "$INSTALL_DIR/adapters/claude/agents/"*.md; do
     remove_generated_file "$HOME/.claude/agents/$(basename "$file")" "$file"

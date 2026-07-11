@@ -1145,11 +1145,16 @@ if [[ "$GITHUB_LSP_READY" == 1 && "$OFFLINE" != 1 ]]; then
 fi
 
 step "Configuring agents"
+codex_status_action=restore
+[[ "$TARGET_CODEX" == 1 && "$STATUSLINE" == 1 ]] && codex_status_action=install
+if ! python3 "$ROOT/scripts/codex_statusline.py" "$codex_status_action" \
+  "$CODEX_HOME/config.toml" "$CONFIG_HOME/codex-statusline-state.json"; then
+  warn "Keeping existing Codex config; native status line fallback could not be updated."
+fi
 if [[ "$TARGET_CODEX" == 1 ]]; then
   mkdir -p "$CODEX_HOME/agents" "$CODEX_HOME/themes"
   migrate_legacy_codex_roles
   status_value='status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-remaining", "five-hour-limit", "weekly-limit"]'
-  [[ "$CODEX_POWERLINE" == 1 ]] && status_value='# Native status line disabled; external Powerline wrapper is active.'
   [[ "$LSP" == 1 && "$BRIDGE_READY" == 1 ]] && lsp_enabled=true || lsp_enabled=false
   sed \
     -e "s|@EFFORT@|$EFFORT|" \
