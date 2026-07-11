@@ -1,0 +1,29 @@
+{
+  "name": "apollo-rust-best-practices",
+  "version": "1.1.0",
+  "description": "Idiomatic, safe, and performant Rust guidance from Apollo GraphQL.",
+  "author": {
+    "name": "Apollo GraphQL",
+    "url": "https://github.com/apollographql"
+  },
+  "homepage": "https://github.com/apollographql/skills/tree/main/skills/rust-best-practices",
+  "repository": "https://github.com/apollographql/skills",
+  "license": "MIT",
+  "keywords": ["rust", "clippy", "performance", "testing", "best-practices"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Apollo Rust Best Practices",
+    "shortDescription": "Idiomatic Rust engineering guidance",
+    "longDescription": "Write and review idiomatic Rust using Apollo GraphQL guidance for ownership, errors, linting, performance, testing, dispatch, type state, documentation, and pointers.",
+    "developerName": "Apollo GraphQL",
+    "category": "Development",
+    "capabilities": ["Instructions", "Code review", "Rust"],
+    "websiteURL": "https://github.com/apollographql/skills/tree/main/skills/rust-best-practices",
+    "defaultPrompt": [
+      "Use Apollo Rust Best Practices for this Rust task.",
+      "Review this Rust code for idiomatic ownership and error handling.",
+      "Apply Apollo's Rust performance and Clippy guidance."
+    ],
+    "brandColor": "#E535AB"
+  }
+}

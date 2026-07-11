@@ -67,6 +67,7 @@ remove_skill_source() {
 remove_skill_set() {
   local target="$1"
   [[ -d "$INSTALL_DIR" ]] || return 0
+  remove_skill_source "$target" "$INSTALL_DIR/plugins/apollo-rust-best-practices/skills"
   remove_skill_source "$target" "$INSTALL_DIR/plugins/caveman/skills"
   remove_skill_source "$target" "$INSTALL_DIR/plugins/ponytail/skills"
   remove_skill_source "$target" "$INSTALL_DIR/plugins/centaury-workflow/skills"
@@ -81,6 +82,29 @@ remove_owned_integration() {
   else
     printf 'Could not remove %s; ownership marker retained: %s\n' "$description" "$marker" >&2
   fi
+}
+
+remove_hcom_hooks() {
+  local marker_dir="$CONFIG_HOME/hcom-hooks" hcom_bin="" marker tool candidate
+  [[ -d "$marker_dir" ]] || return 0
+  for candidate in "$(command -v hcom 2>/dev/null || true)" "$BIN_DIR/hcom" \
+    "$HOME/.local/bin/hcom" "$HOME/.cargo/bin/hcom"; do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      hcom_bin="$candidate"
+      break
+    fi
+  done
+  for marker in "$marker_dir"/*; do
+    [[ -f "$marker" ]] || continue
+    tool="$(basename "$marker")"
+    if [[ -n "$hcom_bin" ]]; then
+      remove_owned_integration "$marker" "HCOM hooks for $tool" "$hcom_bin" hooks remove "$tool"
+    else
+      printf 'Could not remove HCOM hooks for %s; ownership marker retained: %s\n' \
+        "$tool" "$marker" >&2
+    fi
+  done
+  rmdir "$marker_dir" 2>/dev/null || true
 }
 
 remove_native_plugins() {
@@ -152,12 +176,23 @@ if command -v git >/dev/null 2>&1; then
 fi
 
 if command -v codex >/dev/null 2>&1; then
+  codex_native="$CONFIG_HOME/native-plugins"
   codex plugin remove caveman@aicli-ultimate 2>/dev/null || true
   codex plugin remove ponytail@aicli-ultimate 2>/dev/null || true
   codex plugin remove centaury-workflow@aicli-ultimate 2>/dev/null || true
   codex plugin remove orquestrator@aicli-ultimate 2>/dev/null || true
-  codex plugin marketplace remove aicli-ultimate 2>/dev/null || true
+  marker="$codex_native/codex-apollo-rust-best-practices"
+  if [[ -f "$marker" ]]; then
+    remove_owned_integration "$marker" "Codex Apollo Rust plugin" \
+      codex plugin remove apollo-rust-best-practices@aicli-ultimate
+  fi
+  marker="$codex_native/codex-marketplace-aicli-ultimate"
+  if [[ -f "$marker" && ! -f "$codex_native/codex-apollo-rust-best-practices" ]]; then
+    remove_owned_integration "$marker" "Codex AI CLI Ultimate marketplace" \
+      codex plugin marketplace remove aicli-ultimate
+  fi
 fi
+remove_hcom_hooks
 remove_native_plugins
 if command -v agy >/dev/null 2>&1; then
   agy plugin uninstall aicli-ultimate >/dev/null 2>&1 || true
