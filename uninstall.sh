@@ -283,6 +283,7 @@ remove_generated_file "$CODEX_HOME/themes/midnight-blue.tmTheme" "$INSTALL_DIR/c
 if [[ -e "$HOME/.gemini/config/plugins/aicli-ultimate/.aicli-ultimate-owned" ]]; then
   rm -rf "$HOME/.gemini/config/plugins/aicli-ultimate"
 fi
+remove_generated_file "$BIN_DIR/aicli" "$INSTALL_DIR/scripts/aicli"
 remove_generated_file "$BIN_DIR/aicli-ultimate" "$INSTALL_DIR/statusline/codex-powerline"
 remove_generated_file "$CODEX_SHIM" "$INSTALL_DIR/statusline/codex-powerline"
 rmdir "$(dirname "$CODEX_SHIM")" 2>/dev/null || true
@@ -324,6 +325,7 @@ rm -f "$CONFIG_HOME/centaury.gitconfig" "$CONFIG_HOME/modes" "$CONFIG_HOME/tmux.
   "$CONFIG_HOME/claude-statusline-previous.json" "$CONFIG_HOME/profile-state.json" \
   "$CONFIG_HOME/antigravity-statusline-previous.json" "$CONFIG_HOME/omp-statusline-owned" \
   "$CONFIG_HOME/opencode-ponytail-owned" \
+  "$CONFIG_HOME/latest-release" \
   "$CONFIG_HOME/manifest.txt" "$CONFIG_HOME/manifest.txt.new" \
   "$CONFIG_HOME/install-state.json"
 

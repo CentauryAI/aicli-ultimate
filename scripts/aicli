@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_SLUG="${AICLI_ULTIMATE_REPO:-CentauryAI/aicli-ultimate}"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
+INSTALL_DIR="${AICLI_ULTIMATE_INSTALL_DIR:-$HOME/.local/share/aicli-ultimate}"
+STATE_FILE="$CONFIG_HOME/install-state.json"
+CACHE_FILE="$CONFIG_HOME/latest-release"
+
+die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+installed_release() {
+  sed -n 's/.*"release": *"\([^"]*\)".*/\1/p' "$STATE_FILE" 2>/dev/null | head -1 || true
+}
+
+# Resolves the latest tag by following the /releases/latest redirect (no API,
+# no rate limit, no jq). Prints nothing when unreachable or no release exists.
+latest_release() {
+  local url
+  url="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+    "https://github.com/$REPO_SLUG/releases/latest" 2>/dev/null)" || return 1
+  url="${url##*/}"
+  [[ "$url" == v* ]] || return 1
+  printf '%s' "$url"
+}
+
+# newer INSTALLED LATEST -> true when LATEST is a strictly newer version
+newer() {
+  [[ "$1" != "$2" && "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$2" ]]
+}
+
+cmd_update() {
+  local installed latest
+  installed="$(installed_release)"
+  [[ -n "$installed" ]] || die "no installation found; run install.sh first"
+  [[ "$installed" == dev ]] && die "development checkout; update with git pull and ./install.sh"
+  latest="$(latest_release)" || die "could not resolve the latest release from GitHub"
+  if [[ "${1:-}" == --check ]]; then
+    if newer "$installed" "$latest"; then
+      printf 'Update available: %s -> %s. Run: aicli update\n' "$installed" "$latest"
+    else
+      printf 'Up to date (%s).\n' "$installed"
+    fi
+    return 0
+  fi
+  if ! newer "$installed" "$latest"; then
+    printf 'Already up to date (%s). Nothing reinstalled.\n' "$installed"
+    return 0
+  fi
+  printf 'Updating aicli-ultimate %s -> %s (reusing your saved selections)\n' "$installed" "$latest"
+  curl -fsSL "https://raw.githubusercontent.com/$REPO_SLUG/$latest/install.sh" \
+    | AICLI_ULTIMATE_UPDATE=1 AICLI_ULTIMATE_REF="$latest" bash
+  rm -f "$CACHE_FILE"
+}
+
+# Shell-startup hint: instant (reads only the local cache) and refreshes the
+# cache in a detached background curl at most once per day.
+cmd_notify() {
+  local installed latest
+  installed="$(installed_release)"
+  [[ -n "$installed" && "$installed" != dev ]] || return 0
+  if [[ ! -e "$CACHE_FILE" || -n "$(find "$CACHE_FILE" -mmin +1440 -print -quit 2>/dev/null)" ]]; then
+    mkdir -p "$CONFIG_HOME"
+    touch "$CACHE_FILE" # throttles retries even when the fetch below fails
+    { latest_release >"$CACHE_FILE.tmp" && mv "$CACHE_FILE.tmp" "$CACHE_FILE"; } >/dev/null 2>&1 &
+  fi
+  latest="$(head -n1 "$CACHE_FILE" 2>/dev/null)" || true
+  [[ -n "${latest:-}" ]] || return 0
+  if newer "$installed" "$latest"; then
+    printf '\033[1;33maicli-ultimate %s is available\033[0m (installed: %s). Run: \033[1maicli update\033[0m\n' \
+      "$latest" "$installed"
+  fi
+}
+
+show_doc() {
+  if command -v glow >/dev/null 2>&1; then
+    glow -p "$1"
+  else
+    "${PAGER:-less}" "$1"
+  fi
+}
+
+cmd_docs() {
+  local root name f choice files=() names=()
+  if [[ -f "$INSTALL_DIR/README.md" ]]; then
+    root="$INSTALL_DIR"
+  else
+    root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  fi
+  [[ -f "$root/README.md" ]] || die "documentation not found; reinstall AI CLI Ultimate"
+  files=("$root/README.md")
+  for f in "$root"/docs/*.md; do [[ -f "$f" ]] && files+=("$f"); done
+  if [[ -n "${1:-}" ]]; then
+    name="$(basename "${1%.md}")"
+    for f in "${files[@]}"; do
+      if [[ "$(basename "${f%.md}")" == "$name"* ]]; then
+        show_doc "$f"
+        return 0
+      fi
+    done
+    die "no document matches '$1'; run 'aicli docs' to list them"
+  fi
+  command -v glow >/dev/null 2>&1 \
+    || printf 'tip: install glow for rendered markdown (https://github.com/charmbracelet/glow)\n'
+  for f in "${files[@]}"; do names+=("${f#"$root"/}"); done
+  PS3='doc (number, q quits)> '
+  select choice in "${names[@]}"; do
+    [[ -n "$choice" ]] || return 0
+    show_doc "$root/$choice"
+  done </dev/tty
+}
+
+cmd_version() {
+  printf 'aicli-ultimate %s\n' "$(installed_release | grep . || printf 'not installed')"
+}
+
+usage() {
+  cat <<'EOF'
+aicli — AI CLI Ultimate helper
+
+Usage:
+  aicli update            Update to the latest release (skips everything when
+                          already current; reuses your saved install selections)
+  aicli update --check    Only report whether an update exists
+  aicli docs [name]       Browse the bundled documentation in the terminal
+  aicli version           Show the installed release
+  aicli notify            Fast cached update hint (used at shell startup)
+EOF
+}
+
+case "${1:-}" in
+  update) shift; cmd_update "$@" ;;
+  docs) shift; cmd_docs "$@" ;;
+  notify) cmd_notify ;;
+  version|--version|-V) cmd_version ;;
+  ''|help|--help|-h) usage ;;
+  *) usage >&2; die "unknown command: $1" ;;
+esac
