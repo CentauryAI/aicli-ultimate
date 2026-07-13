@@ -73,7 +73,7 @@ AI CLI Ultimate's bundled Orquestrator policy expects these profiles:
 | HCOM tool | Expected profile | Best use | Avoid |
 | --- | --- | --- | --- |
 | `claude` | DeepSeek V4 Flash | Cheap, fast, simple, repetitive, or bulk changes | Images, visual work, complex or high-risk reasoning |
-| `omp` | MiniMax M3 | Easy-to-moderate agentic work, long context, multimodal input | Highest-risk security or architecture decisions |
+| `omp` | MiniMax M3 | Easy-to-moderate agentic work, long context, multimodal input, live internet research (Perplexity web search) | Highest-risk security or architecture decisions |
 | `opencode` | Qwen 3.7 Plus | Moderate-to-complex implementation and multimodal input | Maximum-risk security or backend reasoning |
 | `antigravity` | Gemini 3.5 Flash | Frontend, visual, multimodal, image input, and image generation | Backend-only work that a cheaper worker can handle |
 | `codex` | GPT-5.6 Sol | Research, planning, difficult backend, optimization, security, hard review | Frontend implementation |
@@ -95,6 +95,7 @@ Examples:
 
 - project-wide rename: Claude;
 - ordinary API endpoint: OMP or OpenCode;
+- live internet research: OMP (Perplexity web search);
 - complex service refactor: OpenCode;
 - screenshot-driven UI: Antigravity;
 - authentication threat review: Codex;

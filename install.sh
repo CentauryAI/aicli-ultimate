@@ -524,6 +524,7 @@ configure_shell() {
       path_value="$(dirname "$CODEX_SHIM"):$path_value"
     fi
     printf 'export PATH="%s:$PATH"\n' "$path_value"
+    printf 'command -v aicli >/dev/null 2>&1 && aicli notify\n'
     [[ "$TARGET_OPENCODE" == 1 && "$LSP" == 1 ]] \
       && printf 'export OPENCODE_EXPERIMENTAL_LSP_TOOL=true\n'
     if [[ "$COMPLETIONS" == 1 ]]; then
@@ -952,9 +953,31 @@ if [[ -r "$STATE_FILE" ]]; then
   fi
 fi
 
+# Update mode (aicli update): reuse the selections saved by the previous
+# install and skip every prompt. Same release = nothing to do.
+UPDATE_MODE=0
+if [[ "${AICLI_ULTIMATE_UPDATE:-0}" == 1 ]]; then
+  saved_selections="$(python3 -c 'import json,sys
+for key, value in json.load(open(sys.argv[1]))["selections"].items():
+    print(f"{key}={value}")' "$STATE_FILE" 2>/dev/null || true)"
+  if [[ -n "$saved_selections" ]]; then
+    while IFS= read -r selection; do
+      [[ "$selection" =~ ^[A-Z_]+=[A-Za-z0-9]*$ ]] || die "invalid saved selection: $selection"
+      eval "$selection"
+    done <<<"$saved_selections"
+    UPDATE_MODE=1
+    if [[ "${PREVIOUS_RELEASE:-}" == "$RELEASE_VERSION" && "$DRY_RUN" != 1 ]]; then
+      info "Already up to date ($RELEASE_VERSION); nothing to do."
+      exit 0
+    fi
+  else
+    warn "No saved selections in $STATE_FILE; continuing with the normal installer flow."
+  fi
+fi
+
 TUI_DONE=0
 TUI_BIN=""
-if [[ "$NONINTERACTIVE" != 1 && -z "${AICLI_ULTIMATE_TARGETS:-}" && -r /dev/tty && -w /dev/tty ]]; then
+if [[ "$UPDATE_MODE" != 1 && "$NONINTERACTIVE" != 1 && -z "${AICLI_ULTIMATE_TARGETS:-}" && -r /dev/tty && -w /dev/tty ]]; then
   resolve_tui_bin
   if [[ -n "$TUI_BIN" ]] || command -v whiptail >/dev/null 2>&1; then
     if run_tui; then
@@ -965,7 +988,7 @@ if [[ "$NONINTERACTIVE" != 1 && -z "${AICLI_ULTIMATE_TARGETS:-}" && -r /dev/tty 
   fi
 fi
 
-if [[ "$TUI_DONE" == 1 ]]; then
+if [[ "$UPDATE_MODE" == 1 || "$TUI_DONE" == 1 ]]; then
   :
 elif [[ -n "${AICLI_ULTIMATE_TARGETS:-}" ]]; then
   target_selected codex && TARGET_CODEX=1 || TARGET_CODEX=0
@@ -991,7 +1014,7 @@ fi
 MCPLS_BIN="$BIN_DIR/aicli-mcpls"
 GITHUB_LSP_BIN="$BIN_DIR/github-lsp"
 
-if [[ "$TUI_DONE" != 1 ]]; then
+if [[ "$TUI_DONE" != 1 && "$UPDATE_MODE" != 1 ]]; then
   EFFORT="${AICLI_ULTIMATE_EFFORT:-xhigh}"
   if [[ "$NONINTERACTIVE" != 1 ]]; then
     read -r -p "Reasoning effort [xhigh/high/medium] (xhigh): " EFFORT </dev/tty || EFFORT=xhigh
@@ -1104,6 +1127,7 @@ fi
 if [[ "$TARGET_ANTIGRAVITY" == 1 ]]; then
   backup_file "$HOME/.gemini/config/plugins/aicli-ultimate" "$backup"
 fi
+backup_file "$BIN_DIR/aicli" "$backup"
 backup_file "$BIN_DIR/aicli-ultimate" "$backup"
 backup_file "$BIN_DIR/aicli-ultimate-status" "$backup"
 backup_file "$CODEX_SHIM" "$backup"
@@ -1120,6 +1144,9 @@ NEW_MANIFEST="$CONFIG_HOME/manifest.txt.new"
 if [[ "$ROOT" != "$INSTALL_DIR" ]]; then
   (cd "$ROOT" && tar --exclude=.git -cf - .) | (cd "$INSTALL_DIR" && tar -xf -)
 fi
+
+install_owned_file "$ROOT/scripts/aicli" "$BIN_DIR/aicli"
+[[ -e "$BIN_DIR/aicli.aicli-ultimate-owned" ]] && chmod +x "$BIN_DIR/aicli"
 
 render_agents "$ROOT/config/AGENTS.md" "$CONFIG_HOME/global-instructions.md"
 
@@ -1367,13 +1394,42 @@ cat >"$STATE_FILE" <<EOF
   "backup": "$backup",
   "install_dir": "$INSTALL_DIR",
   "targets": "${AICLI_ULTIMATE_TARGETS:-interactive}",
-  "centaury_guard": $([[ "$CENTAURY" == 1 ]] && printf true || printf false)
+  "centaury_guard": $([[ "$CENTAURY" == 1 ]] && printf true || printf false),
+  "selections": {
+    "TARGET_CODEX": $TARGET_CODEX,
+    "TARGET_CLAUDE": $TARGET_CLAUDE,
+    "TARGET_OPENCODE": $TARGET_OPENCODE,
+    "TARGET_OMP": $TARGET_OMP,
+    "TARGET_ANTIGRAVITY": $TARGET_ANTIGRAVITY,
+    "EFFORT": "$EFFORT",
+    "STATUSLINE": $STATUSLINE,
+    "LSP": $LSP,
+    "CAVEMAN": $CAVEMAN,
+    "CAVEMAN_ALWAYS": $CAVEMAN_ALWAYS,
+    "PONYTAIL": $PONYTAIL,
+    "PONYTAIL_ALWAYS": $PONYTAIL_ALWAYS,
+    "ORQUESTRATOR": $ORQUESTRATOR,
+    "SUPERPOWERS": $SUPERPOWERS,
+    "CENTAURY": $CENTAURY,
+    "COMPLETIONS": $COMPLETIONS,
+    "SECURITY": $SECURITY,
+    "FRONTEND": $FRONTEND,
+    "PLAYWRIGHT": $PLAYWRIGHT,
+    "REACT": $REACT,
+    "WEBAPP": $WEBAPP,
+    "MCPBUILDER": $MCPBUILDER,
+    "GRILLDOCS": $GRILLDOCS,
+    "SECBP": $SECBP,
+    "DIFFREVIEW": $DIFFREVIEW,
+    "GHFIXCI": $GHFIXCI
+  }
 }
 EOF
 
 printf '\n\033[1;32mAI CLI Ultimate installed.\033[0m\n'
 printf '\033[1;33mRestart your shell and every configured agent to load this install.\033[0m\n'
 printf 'Skills are available through each agent native skill syntax or natural language.\n'
+printf 'Update anytime with `aicli update`; browse the docs with `aicli docs`.\n'
 if [[ "$TARGET_CODEX" == 1 ]]; then
   printf 'Codex diagnostics: aicli-ultimate --doctor\n'
   [[ "$ORQUESTRATOR" == 1 ]] \
