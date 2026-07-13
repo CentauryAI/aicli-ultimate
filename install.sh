@@ -102,6 +102,59 @@ resolve_tui_bin() {
   build_tui_bin || true
 }
 
+# Single source of truth: checklist tag -> selection variable.
+checklist_var() {
+  case "$1" in
+    codex) printf TARGET_CODEX ;;
+    claude) printf TARGET_CLAUDE ;;
+    opencode) printf TARGET_OPENCODE ;;
+    omp) printf TARGET_OMP ;;
+    antigravity) printf TARGET_ANTIGRAVITY ;;
+    statusline) printf STATUSLINE ;;
+    lsp) printf LSP ;;
+    caveman) printf CAVEMAN ;;
+    caveman-always) printf CAVEMAN_ALWAYS ;;
+    ponytail) printf PONYTAIL ;;
+    ponytail-always) printf PONYTAIL_ALWAYS ;;
+    orquestrator) printf ORQUESTRATOR ;;
+    superpowers) printf SUPERPOWERS ;;
+    centaury) printf CENTAURY ;;
+    completions) printf COMPLETIONS ;;
+    security) printf SECURITY ;;
+    frontend) printf FRONTEND ;;
+    playwright) printf PLAYWRIGHT ;;
+    react) printf REACT ;;
+    webapp) printf WEBAPP ;;
+    mcp-builder) printf MCPBUILDER ;;
+    grill-with-docs) printf GRILLDOCS ;;
+    security-bp) printf SECBP ;;
+    diff-review) printf DIFFREVIEW ;;
+    gh-fix-ci) printf GHFIXCI ;;
+    *) return 1 ;;
+  esac
+}
+
+# During an update, a previously selected feature whose bundled files changed
+# in the new release is a forced update. Only bundle-shipped features are
+# detectable; external plugins/skills are refreshed by their own managers.
+feature_changed() {
+  local paths=() p
+  case "$1" in
+    caveman) paths=(plugins/caveman) ;;
+    ponytail) paths=(plugins/ponytail) ;;
+    orquestrator) paths=(plugins/orquestrator) ;;
+    centaury) paths=(plugins/centaury-workflow git-hooks) ;;
+    statusline) paths=(statusline) ;;
+    lsp) paths=(config/mcpls.toml plugins/github-lsp) ;;
+    *) return 1 ;;
+  esac
+  [[ -d "$INSTALL_DIR" && "$ROOT" != "$INSTALL_DIR" ]] || return 1
+  for p in "${paths[@]}"; do
+    diff -rq "$INSTALL_DIR/$p" "$ROOT/$p" >/dev/null 2>&1 || return 0
+  done
+  return 1
+}
+
 run_tui() {
   local choices d_claude=OFF d_opencode=OFF d_omp=OFF d_agy=OFF
   command -v claude >/dev/null 2>&1 && d_claude=ON
@@ -135,8 +188,37 @@ run_tui() {
     diff-review "Optional differential security review skill (Trail of Bits)" OFF
     gh-fix-ci "Optional GitHub Actions fixer skill (OpenAI)" OFF
   )
+  # Update mode: pre-fill from the saved selections. Previously selected
+  # features whose bundled files changed are locked as forced updates (TUI
+  # only; whiptail cannot lock). New features default to unselected.
+  if [[ "$UPDATE_MODE" == 1 ]]; then
+    local i var state
+    for ((i = 0; i < ${#items[@]}; i += 3)); do
+      var="$(checklist_var "${items[i]}")" || continue
+      state=OFF
+      if [[ "${!var:-0}" == 1 ]]; then
+        state=ON
+        if [[ -n "$TUI_BIN" ]] && feature_changed "${items[i]}"; then
+          state=LOCKED
+          items[i + 1]="${items[i + 1]} — UPDATE"
+        fi
+      fi
+      items[i + 2]="$state"
+    done
+  fi
   if [[ -n "$TUI_BIN" ]]; then
-    choices="$("$TUI_BIN" checklist "AI CLI Ultimate" "${items[@]}" </dev/tty)" || return 1
+    local rc=0
+    choices="$("$TUI_BIN" checklist "AI CLI Ultimate" "${items[@]}" </dev/tty)" || rc=$?
+    if [[ "$rc" == 2 ]]; then
+      # Older TUI binary without LOCKED support: degrade to plain ON.
+      local i
+      for ((i = 2; i < ${#items[@]}; i += 3)); do
+        [[ "${items[i]}" == LOCKED ]] && items[i]=ON
+      done
+      rc=0
+      choices="$("$TUI_BIN" checklist "AI CLI Ultimate" "${items[@]}" </dev/tty)" || rc=$?
+    fi
+    [[ "$rc" == 0 ]] || return 1
   else
     choices="$(whiptail --title "AI CLI Ultimate" --separate-output --checklist \
       "Space toggles, arrows move, Enter confirms." 30 74 20 \
@@ -148,35 +230,10 @@ run_tui() {
   ORQUESTRATOR=0 SUPERPOWERS=0 CENTAURY=0 COMPLETIONS=0 SECURITY=0
   FRONTEND=0 PLAYWRIGHT=0 REACT=0 WEBAPP=0 MCPBUILDER=0 GRILLDOCS=0 SECBP=0
   DIFFREVIEW=0 GHFIXCI=0
-  local tag
+  local tag var
   while IFS= read -r tag; do
-    case "$tag" in
-      codex) TARGET_CODEX=1 ;;
-      claude) TARGET_CLAUDE=1 ;;
-      opencode) TARGET_OPENCODE=1 ;;
-      omp) TARGET_OMP=1 ;;
-      antigravity) TARGET_ANTIGRAVITY=1 ;;
-      statusline) STATUSLINE=1 ;;
-      lsp) LSP=1 ;;
-      caveman) CAVEMAN=1 ;;
-      caveman-always) CAVEMAN_ALWAYS=1 ;;
-      ponytail) PONYTAIL=1 ;;
-      ponytail-always) PONYTAIL_ALWAYS=1 ;;
-      orquestrator) ORQUESTRATOR=1 ;;
-      superpowers) SUPERPOWERS=1 ;;
-      centaury) CENTAURY=1 ;;
-      completions) COMPLETIONS=1 ;;
-      security) SECURITY=1 ;;
-      frontend) FRONTEND=1 ;;
-      playwright) PLAYWRIGHT=1 ;;
-      react) REACT=1 ;;
-      webapp) WEBAPP=1 ;;
-      mcp-builder) MCPBUILDER=1 ;;
-      grill-with-docs) GRILLDOCS=1 ;;
-      security-bp) SECBP=1 ;;
-      diff-review) DIFFREVIEW=1 ;;
-      gh-fix-ci) GHFIXCI=1 ;;
-    esac
+    var="$(checklist_var "$tag")" || continue
+    eval "$var=1"
   done <<<"$choices"
   [[ "$CAVEMAN" == 1 ]] || CAVEMAN_ALWAYS=0
   [[ "$PONYTAIL" == 1 ]] || PONYTAIL_ALWAYS=0
@@ -187,6 +244,8 @@ run_tui() {
   fi
   if [[ -n "${AICLI_ULTIMATE_EFFORT:-}" ]]; then
     EFFORT="$AICLI_ULTIMATE_EFFORT"
+  elif [[ "$UPDATE_MODE" == 1 ]]; then
+    : # keep the saved reasoning effort
   elif [[ -n "$TUI_BIN" ]]; then
     EFFORT="$("$TUI_BIN" menu "Reasoning effort" \
       xhigh "Best quality (default)" \
@@ -524,6 +583,7 @@ configure_shell() {
       path_value="$(dirname "$CODEX_SHIM"):$path_value"
     fi
     printf 'export PATH="%s:$PATH"\n' "$path_value"
+    printf 'command -v aicli >/dev/null 2>&1 && aicli notify\n'
     [[ "$TARGET_OPENCODE" == 1 && "$LSP" == 1 ]] \
       && printf 'export OPENCODE_EXPERIMENTAL_LSP_TOOL=true\n'
     if [[ "$COMPLETIONS" == 1 ]]; then
@@ -952,6 +1012,29 @@ if [[ -r "$STATE_FILE" ]]; then
   fi
 fi
 
+# Update mode (aicli update): reuse the selections saved by the previous
+# install and skip every prompt. Same release = nothing to do.
+UPDATE_MODE=0
+if [[ "${AICLI_ULTIMATE_UPDATE:-0}" == 1 ]]; then
+  saved_selections="$(python3 -c 'import json,sys
+for key, value in json.load(open(sys.argv[1]))["selections"].items():
+    print(f"{key}={value}")' "$STATE_FILE" 2>/dev/null || true)"
+  if [[ -n "$saved_selections" ]]; then
+    while IFS= read -r selection; do
+      [[ "$selection" =~ ^[A-Z_]+=[A-Za-z0-9]*$ ]] || die "invalid saved selection: $selection"
+      eval "$selection"
+    done <<<"$saved_selections"
+    UPDATE_MODE=1
+    PREVIOUS_COMPLETE="$(python3 -c 'import json,sys; print(1 if json.load(open(sys.argv[1])).get("complete", True) else 0)' "$STATE_FILE" 2>/dev/null || printf 1)"
+    if [[ "${PREVIOUS_RELEASE:-}" == "$RELEASE_VERSION" && "$PREVIOUS_COMPLETE" == 1 && "$DRY_RUN" != 1 ]]; then
+      info "Already up to date ($RELEASE_VERSION); nothing to do."
+      exit 0
+    fi
+  else
+    warn "No saved selections in $STATE_FILE; continuing with the normal installer flow."
+  fi
+fi
+
 TUI_DONE=0
 TUI_BIN=""
 if [[ "$NONINTERACTIVE" != 1 && -z "${AICLI_ULTIMATE_TARGETS:-}" && -r /dev/tty && -w /dev/tty ]]; then
@@ -959,13 +1042,16 @@ if [[ "$NONINTERACTIVE" != 1 && -z "${AICLI_ULTIMATE_TARGETS:-}" && -r /dev/tty 
   if [[ -n "$TUI_BIN" ]] || command -v whiptail >/dev/null 2>&1; then
     if run_tui; then
       TUI_DONE=1
+    elif [[ "$UPDATE_MODE" == 1 ]]; then
+      info "Update cancelled; nothing changed."
+      exit 0
     else
       info "Selection cancelled in the checklist; using plain prompts."
     fi
   fi
 fi
 
-if [[ "$TUI_DONE" == 1 ]]; then
+if [[ "$UPDATE_MODE" == 1 || "$TUI_DONE" == 1 ]]; then
   :
 elif [[ -n "${AICLI_ULTIMATE_TARGETS:-}" ]]; then
   target_selected codex && TARGET_CODEX=1 || TARGET_CODEX=0
@@ -991,7 +1077,7 @@ fi
 MCPLS_BIN="$BIN_DIR/aicli-mcpls"
 GITHUB_LSP_BIN="$BIN_DIR/github-lsp"
 
-if [[ "$TUI_DONE" != 1 ]]; then
+if [[ "$TUI_DONE" != 1 && "$UPDATE_MODE" != 1 ]]; then
   EFFORT="${AICLI_ULTIMATE_EFFORT:-xhigh}"
   if [[ "$NONINTERACTIVE" != 1 ]]; then
     read -r -p "Reasoning effort [xhigh/high/medium] (xhigh): " EFFORT </dev/tty || EFFORT=xhigh
@@ -1104,6 +1190,7 @@ fi
 if [[ "$TARGET_ANTIGRAVITY" == 1 ]]; then
   backup_file "$HOME/.gemini/config/plugins/aicli-ultimate" "$backup"
 fi
+backup_file "$BIN_DIR/aicli" "$backup"
 backup_file "$BIN_DIR/aicli-ultimate" "$backup"
 backup_file "$BIN_DIR/aicli-ultimate-status" "$backup"
 backup_file "$CODEX_SHIM" "$backup"
@@ -1120,6 +1207,57 @@ NEW_MANIFEST="$CONFIG_HOME/manifest.txt.new"
 if [[ "$ROOT" != "$INSTALL_DIR" ]]; then
   (cd "$ROOT" && tar --exclude=.git -cf - .) | (cd "$INSTALL_DIR" && tar -xf -)
 fi
+printf '%s\n' "$RELEASE_VERSION" >"$INSTALL_DIR/VERSION"
+
+install_owned_file "$ROOT/scripts/aicli" "$BIN_DIR/aicli"
+[[ -e "$BIN_DIR/aicli.aicli-ultimate-owned" ]] && chmod +x "$BIN_DIR/aicli"
+
+# Written twice: before the remaining file operations ("complete": false) so
+# an interrupted run still leaves a usable aicli/update state, and again at
+# finalize ("complete": true). aicli update repairs incomplete installs.
+write_state() {
+  cat >"$STATE_FILE" <<EOF
+{
+  "version": 1,
+  "release": "$RELEASE_VERSION",
+  "installed_at": "$timestamp",
+  "backup": "$backup",
+  "install_dir": "$INSTALL_DIR",
+  "targets": "${AICLI_ULTIMATE_TARGETS:-interactive}",
+  "complete": $1,
+  "centaury_guard": $([[ "$CENTAURY" == 1 ]] && printf true || printf false),
+  "selections": {
+    "TARGET_CODEX": $TARGET_CODEX,
+    "TARGET_CLAUDE": $TARGET_CLAUDE,
+    "TARGET_OPENCODE": $TARGET_OPENCODE,
+    "TARGET_OMP": $TARGET_OMP,
+    "TARGET_ANTIGRAVITY": $TARGET_ANTIGRAVITY,
+    "EFFORT": "$EFFORT",
+    "STATUSLINE": $STATUSLINE,
+    "LSP": $LSP,
+    "CAVEMAN": $CAVEMAN,
+    "CAVEMAN_ALWAYS": $CAVEMAN_ALWAYS,
+    "PONYTAIL": $PONYTAIL,
+    "PONYTAIL_ALWAYS": $PONYTAIL_ALWAYS,
+    "ORQUESTRATOR": $ORQUESTRATOR,
+    "SUPERPOWERS": $SUPERPOWERS,
+    "CENTAURY": $CENTAURY,
+    "COMPLETIONS": $COMPLETIONS,
+    "SECURITY": $SECURITY,
+    "FRONTEND": $FRONTEND,
+    "PLAYWRIGHT": $PLAYWRIGHT,
+    "REACT": $REACT,
+    "WEBAPP": $WEBAPP,
+    "MCPBUILDER": $MCPBUILDER,
+    "GRILLDOCS": $GRILLDOCS,
+    "SECBP": $SECBP,
+    "DIFFREVIEW": $DIFFREVIEW,
+    "GHFIXCI": $GHFIXCI
+  }
+}
+EOF
+}
+write_state false
 
 render_agents "$ROOT/config/AGENTS.md" "$CONFIG_HOME/global-instructions.md"
 
@@ -1359,21 +1497,12 @@ fi
 
 step "Finalizing"
 prune_orphans
-cat >"$STATE_FILE" <<EOF
-{
-  "version": 1,
-  "release": "$RELEASE_VERSION",
-  "installed_at": "$timestamp",
-  "backup": "$backup",
-  "install_dir": "$INSTALL_DIR",
-  "targets": "${AICLI_ULTIMATE_TARGETS:-interactive}",
-  "centaury_guard": $([[ "$CENTAURY" == 1 ]] && printf true || printf false)
-}
-EOF
+write_state true
 
 printf '\n\033[1;32mAI CLI Ultimate installed.\033[0m\n'
 printf '\033[1;33mRestart your shell and every configured agent to load this install.\033[0m\n'
 printf 'Skills are available through each agent native skill syntax or natural language.\n'
+printf 'Update anytime with `aicli update`; browse the docs with `aicli docs`.\n'
 if [[ "$TARGET_CODEX" == 1 ]]; then
   printf 'Codex diagnostics: aicli-ultimate --doctor\n'
   [[ "$ORQUESTRATOR" == 1 ]] \

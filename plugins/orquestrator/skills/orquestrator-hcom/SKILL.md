@@ -22,7 +22,7 @@ Before every delegation, read `hcom list --json`. HCOM reports each live agent's
 | Tool | Expected model | Priority and fit | Do not use for |
 | --- | --- | --- | --- |
 | `claude` | DeepSeek V4 Flash | First choice for cheap, fast, simple, repetitive, or bulk work: renames, mechanical edits, small functions, and straightforward implementations. | Images, visual work, or complex/high-risk reasoning. |
-| `omp` | MiniMax M3 | Cheap choice for easy-to-moderate agentic work, long context, and multimodal input. Good fallback for Claude or OpenCode. | Highest-risk security or architecture decisions. |
+| `omp` | MiniMax M3 | Cheap choice for easy-to-moderate agentic work, long context, and multimodal input. Ships with Perplexity web search, so it is the first choice for live internet research. Good fallback for Claude or OpenCode. | Highest-risk security or architecture decisions. |
 | `opencode` | Qwen 3.7 Plus | Moderate-to-complex implementation needing more reasoning than Claude, including multimodal input. | Work that clearly requires maximum-quality security or backend reasoning. |
 | `antigravity` | Gemini 3.5 Flash | Frontend, visual, multimodal, image-input, and image-generation tasks. | Backend-only work better handled more cheaply elsewhere. |
 | `codex` | GPT-5.6 Sol | Maximum-quality research, planning, difficult backend, optimization, security analysis, and hard final review. | Frontend work. |
@@ -33,12 +33,12 @@ Unknown tools have no default capability. Use them only when their live `descrip
 
 1. Apply hard exclusions first. Never send image work to Claude or frontend work to Codex.
 2. Match required capability and domain. A matching specialist `description` breaks ties but never overrides a hard exclusion.
-3. Match complexity: simple/bulk -> Claude; easy-to-moderate or long-context -> OMP; moderate-to-complex -> OpenCode; frontend/visual -> Antigravity; complex/high-risk backend, research, planning, optimization, or security -> Codex.
+3. Match complexity: simple/bulk -> Claude; easy-to-moderate, long-context, or live web research -> OMP; moderate-to-complex -> OpenCode; frontend/visual -> Antigravity; complex/high-risk backend, deep offline research, planning, optimization, or security -> Codex.
 4. Among valid matches, prefer `listening` over `active`; never assign to `blocked` or stale agents.
 5. Among equally valid idle agents, choose the cheapest/fastest profile: Claude, OMP, OpenCode, Antigravity, then Codex.
 6. If the preferred tool is unavailable, use only a compatible fallback and state the quality, cost, or modality tradeoff. If no compatible live agent exists, ask before spawning one.
 
-Examples: bulk project rename -> Claude; ordinary API implementation -> OMP or OpenCode according to complexity; screenshot-driven UI -> Antigravity; authentication threat review -> Codex. Split mixed tasks so frontend goes to Antigravity and complex backend/security goes to Codex.
+Examples: bulk project rename -> Claude; ordinary API implementation -> OMP or OpenCode according to complexity; live internet research (docs, releases, current facts) -> OMP via Perplexity; screenshot-driven UI -> Antigravity; authentication threat review -> Codex. Split mixed tasks so frontend goes to Antigravity and complex backend/security goes to Codex.
 
 ## Command protocol
 

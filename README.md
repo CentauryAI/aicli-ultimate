@@ -25,7 +25,7 @@ The installer detects installed CLIs and asks which ones to configure. Safe defa
 - matching Powerlines through each CLI's native UI/status API where available;
 - Midnight Blue for Codex and Tokyo Night for OpenCode.
 
-Existing files are copied to `~/.config/aicli-ultimate/backups/<timestamp>` before changes. Rerun the command to update.
+Existing files are copied to `~/.config/aicli-ultimate/backups/<timestamp>` before changes. After the first install, update with `aicli update` instead of rerunning this command.
 
 ### Non-interactive install
 
@@ -79,6 +79,15 @@ There are no hidden non-interactive variables for every checklist toggle. Rerun 
 ### Releases and versioning
 
 Git semver tags are the release version source. The release workflow writes the tag (for example `v0.4.1`) into the packaged `VERSION` file, builds platform TUI binaries, and publishes the bundle. Pin a deployment with `AICLI_ULTIMATE_REF=v0.4.1`; omit it to install the latest published release with a `main` fallback.
+
+### Updates and docs (`aicli`)
+
+The installer places an `aicli` helper in `~/.local/bin`:
+
+- `aicli update` checks the latest GitHub release and exits immediately when you are already current (it also repairs an installation whose previous run was interrupted). When a newer release exists it reruns the installer in update mode: the checklist opens pre-filled from your saved selections instead of from scratch — features you had installed stay selected (deselect one to uninstall it), features whose bundled files changed in the new release appear highlighted as `— UPDATE` and cannot be deselected, and features new to the release appear unselected for you to opt in. Cancelling the checklist aborts the update without changes. Without a terminal (or with the `whiptail` fallback, which cannot lock items) the saved selections are reused as-is.
+- `aicli update --check` only reports whether an update exists.
+- `aicli docs [name]` browses the bundled documentation (README and `docs/`) in the terminal; it renders markdown with [glow](https://github.com/charmbracelet/glow) when installed and falls back to your pager. Example: `aicli docs orquestrator`.
+- `aicli notify` runs at shell startup (added to the managed shell block): it prints a one-line hint when a newer release exists, using a local cache refreshed in the background at most once per day, so it never slows the prompt.
 
 ## Native adapters
 

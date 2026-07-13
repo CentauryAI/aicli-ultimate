@@ -21,13 +21,15 @@ use ratatui::{
 const CHECK_HINT: &str =
     "↑↓ move · space toggle · a all · n none · enter ok · q cancel · mouse: click/scroll";
 const MENU_HINT: &str = "↑↓ move · enter ok · q cancel · mouse: click/scroll";
-const USAGE: &str = "usage: aicli-tui checklist TITLE TAG DESC ON|OFF [TAG DESC ON|OFF ...]\n       aicli-tui menu TITLE TAG DESC [TAG DESC ...]";
+const USAGE: &str = "usage: aicli-tui checklist TITLE TAG DESC ON|OFF|LOCKED [TAG DESC ON|OFF|LOCKED ...]\n       aicli-tui menu TITLE TAG DESC [TAG DESC ...]";
 
 #[derive(Debug, PartialEq)]
 struct Item {
     tag: String,
     desc: String,
     on: bool,
+    // LOCKED: always selected and not toggleable (forced updates in update mode)
+    locked: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -47,12 +49,15 @@ fn parse_args(args: &[String]) -> Result<Cmd, String> {
             }
             let mut items = Vec::new();
             for c in rest.chunks(3) {
-                let on = match c[2].to_ascii_uppercase().as_str() {
-                    "ON" => true,
-                    "OFF" => false,
-                    bad => return Err(format!("checklist: bad state {bad:?}, expected ON|OFF")),
+                let (on, locked) = match c[2].to_ascii_uppercase().as_str() {
+                    "ON" => (true, false),
+                    "OFF" => (false, false),
+                    "LOCKED" => (true, true),
+                    bad => {
+                        return Err(format!("checklist: bad state {bad:?}, expected ON|OFF|LOCKED"))
+                    }
                 };
-                items.push(Item { tag: c[0].clone(), desc: c[1].clone(), on });
+                items.push(Item { tag: c[0].clone(), desc: c[1].clone(), on, locked });
             }
             Ok(Cmd::Checklist { title, items })
         }
@@ -64,7 +69,7 @@ fn parse_args(args: &[String]) -> Result<Cmd, String> {
             }
             let items = rest
                 .chunks(2)
-                .map(|c| Item { tag: c[0].clone(), desc: c[1].clone(), on: false })
+                .map(|c| Item { tag: c[0].clone(), desc: c[1].clone(), on: false, locked: false })
                 .collect();
             Ok(Cmd::Menu { title, items })
         }
@@ -137,12 +142,17 @@ fn ui(f: &mut Frame, app: &mut App) {
         .iter()
         .map(|i| {
             let text = if app.checklist {
-                let mark = if i.on { 'x' } else { ' ' };
+                let mark = if i.locked { '■' } else if i.on { 'x' } else { ' ' };
                 format!("[{mark}] {:<w$}  {}", i.tag, i.desc, w = app.tag_width)
             } else {
                 format!("{:<w$}  {}", i.tag, i.desc, w = app.tag_width)
             };
-            ListItem::new(text)
+            let row = ListItem::new(text);
+            if i.locked {
+                row.style(Style::new().cyan().bold())
+            } else {
+                row
+            }
         })
         .collect();
     let list = List::new(rows).highlight_style(Style::new().reversed().bold());
@@ -197,13 +207,20 @@ fn run_app(
                     KeyCode::Home => app.cursor = 0,
                     KeyCode::End => app.cursor = app.items.len() - 1,
                     KeyCode::Char(' ') if app.checklist => {
-                        app.items[app.cursor].on = !app.items[app.cursor].on;
+                        let item = &mut app.items[app.cursor];
+                        if !item.locked {
+                            item.on = !item.on;
+                        }
                     }
                     KeyCode::Char('a') if app.checklist => {
                         app.items.iter_mut().for_each(|i| i.on = true);
                     }
                     KeyCode::Char('n') if app.checklist => {
-                        app.items.iter_mut().for_each(|i| i.on = false);
+                        app.items.iter_mut().for_each(|i| {
+                            if !i.locked {
+                                i.on = false;
+                            }
+                        });
                     }
                     KeyCode::Enter => return Ok(Some(app.output())),
                     KeyCode::Esc | KeyCode::Char('q') => return Ok(None),
@@ -227,7 +244,9 @@ fn run_app(
                         if idx < app.items.len() {
                             if app.checklist {
                                 app.cursor = idx;
-                                app.items[idx].on = !app.items[idx].on;
+                                if !app.items[idx].locked {
+                                    app.items[idx].on = !app.items[idx].on;
+                                }
                             } else if idx == app.cursor {
                                 return Ok(Some(app.output())); // second click = OK
                             } else {
@@ -301,11 +320,32 @@ mod tests {
             Cmd::Checklist { title, items } => {
                 assert_eq!(title, "Pick");
                 assert_eq!(items.len(), 2);
-                assert_eq!(items[0], Item { tag: "a".into(), desc: "Alpha".into(), on: true });
+                assert_eq!(
+                    items[0],
+                    Item { tag: "a".into(), desc: "Alpha".into(), on: true, locked: false }
+                );
                 assert!(!items[1].on);
             }
             _ => panic!("wrong variant"),
         }
+    }
+
+    #[test]
+    fn locked_items() {
+        let cmd = parse_args(&v(&["checklist", "Pick", "a", "Alpha", "LOCKED", "b", "Beta", "OFF"]))
+            .expect("should parse");
+        let Cmd::Checklist { items, .. } = cmd else { panic!("wrong variant") };
+        assert!(items[0].on && items[0].locked);
+        assert!(!items[1].locked);
+
+        // locked items survive "none" and stay in the output
+        let mut app = App::new(Cmd::Checklist { title: "T".into(), items });
+        app.items.iter_mut().for_each(|i| {
+            if !i.locked {
+                i.on = false;
+            }
+        });
+        assert_eq!(app.output(), vec!["a".to_string()]);
     }
 
     #[test]

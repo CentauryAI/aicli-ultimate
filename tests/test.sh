@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/aicli-ultimate-test.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
-for script in "$ROOT/install.sh" "$ROOT/uninstall.sh" "$ROOT/statusline/codex-powerline" "$ROOT/statusline/codex-powerline-status" "$ROOT/statusline/claude-powerline-status" "$ROOT/statusline/antigravity-powerline" "$ROOT/git-hooks/pre-commit" "$ROOT/git-hooks/pre-push"; do
+for script in "$ROOT/install.sh" "$ROOT/uninstall.sh" "$ROOT/scripts/aicli" "$ROOT/statusline/codex-powerline" "$ROOT/statusline/codex-powerline-status" "$ROOT/statusline/claude-powerline-status" "$ROOT/statusline/antigravity-powerline" "$ROOT/git-hooks/pre-commit" "$ROOT/git-hooks/pre-push"; do
   bash -n "$script"
 done
 
@@ -599,5 +599,58 @@ AICLI_ULTIMATE_NONINTERACTIVE=1 \
   "$ROOT/uninstall.sh" >/dev/null 2>"$TMP/failure.err"
 test -f "$TMP/failure-home/.config/aicli-ultimate/native-plugins/claude-installed-caveman"
 grep -q 'ownership marker retained' "$TMP/failure.err"
+
+# aicli helper: version, cached notify (no network on a fresh cache), and docs.
+mkdir -p "$TMP/aicli-home/.config/aicli-ultimate"
+printf '{ "version": 1, "release": "v0.4.0" }\n' \
+  >"$TMP/aicli-home/.config/aicli-ultimate/install-state.json"
+aicli_env=(HOME="$TMP/aicli-home" XDG_CONFIG_HOME="$TMP/aicli-home/.config"
+  AICLI_ULTIMATE_INSTALL_DIR="$TMP/aicli-home/.local/share/aicli-ultimate")
+env "${aicli_env[@]}" "$ROOT/scripts/aicli" version | grep -qx 'aicli-ultimate v0.4.0'
+printf 'v9.9.9\n' >"$TMP/aicli-home/.config/aicli-ultimate/latest-release"
+env "${aicli_env[@]}" "$ROOT/scripts/aicli" notify | grep -q 'v9.9.9 is available'
+printf 'v0.4.0\n' >"$TMP/aicli-home/.config/aicli-ultimate/latest-release"
+test -z "$(env "${aicli_env[@]}" "$ROOT/scripts/aicli" notify)"
+env "${aicli_env[@]}" PAGER=cat "$ROOT/scripts/aicli" docs orquestrator-agent-setup \
+  | grep -qi 'orquestrator'
+
+# Update mode reuses the saved selections without prompting.
+mkdir -p "$TMP/update-home/.config/aicli-ultimate"
+cat >"$TMP/update-home/.config/aicli-ultimate/install-state.json" <<'EOF'
+{
+  "version": 1,
+  "release": "v0.0.1",
+  "selections": {
+    "TARGET_CODEX": 1, "TARGET_CLAUDE": 0, "TARGET_OPENCODE": 1, "TARGET_OMP": 0,
+    "TARGET_ANTIGRAVITY": 0, "EFFORT": "high", "STATUSLINE": 0, "LSP": 0,
+    "CAVEMAN": 1, "CAVEMAN_ALWAYS": 0, "PONYTAIL": 1, "PONYTAIL_ALWAYS": 1,
+    "ORQUESTRATOR": 0, "SUPERPOWERS": 0, "CENTAURY": 1, "COMPLETIONS": 0,
+    "SECURITY": 0, "FRONTEND": 0, "PLAYWRIGHT": 0, "REACT": 0, "WEBAPP": 0,
+    "MCPBUILDER": 0, "GRILLDOCS": 0, "SECBP": 0, "DIFFREVIEW": 0, "GHFIXCI": 0
+  }
+}
+EOF
+HOME="$TMP/update-home" \
+XDG_CONFIG_HOME="$TMP/update-home/.config" \
+CODEX_HOME="$TMP/update-home/.codex" \
+AICLI_ULTIMATE_UPDATE=1 \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+AICLI_ULTIMATE_DRY_RUN=1 \
+  bash "$ROOT/install.sh" >"$TMP/update-plan.out"
+grep -q 'targets: codex=1 claude=0 opencode=1 omp=0 antigravity=0' "$TMP/update-plan.out"
+grep -q 'effort=high statusline=0 lsp=0 caveman=1/0 ponytail=1/1 orquestrator=0' "$TMP/update-plan.out"
+
+# feature_changed locks only bundle features whose files differ.
+sed -n '/^feature_changed()/,/^}/p' "$ROOT/install.sh" >"$TMP/feature-changed.sh"
+mkdir -p "$TMP/fc-old/plugins/caveman" "$TMP/fc-new/plugins/caveman"
+printf 'a\n' >"$TMP/fc-old/plugins/caveman/SKILL.md"
+printf 'a\n' >"$TMP/fc-new/plugins/caveman/SKILL.md"
+INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
+  bash -c 'source "$1"; ! feature_changed caveman' _ "$TMP/feature-changed.sh"
+printf 'b\n' >"$TMP/fc-new/plugins/caveman/SKILL.md"
+INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
+  bash -c 'source "$1"; feature_changed caveman' _ "$TMP/feature-changed.sh"
+INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
+  bash -c 'source "$1"; ! feature_changed completions' _ "$TMP/feature-changed.sh"
 
 printf 'All tests passed.\n'
