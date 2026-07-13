@@ -1484,7 +1484,10 @@ if [[ "$OFFLINE" != 1 ]] && (( OPTIONAL_SKILLS > 0 )); then
   install_optional_skill() {
     local ref="$1" name="$2"
     # shellcheck disable=SC2086 -- $skills_agent_list is a controlled space-separated allow-list
-    if npx skills add "$ref" -g -y -a $skills_agent_list; then
+    # </dev/null: with -y this runs non-interactive; without it the skills CLI
+    # drains and echoes stdin, which under `curl … | bash` is the script pipe
+    # (dumps the rest of install.sh to the terminal).
+    if npx skills add "$ref" -g -y -a $skills_agent_list </dev/null; then
       info "Installed optional skill: $name"
     else
       warn "Could not install optional skill: $name"
