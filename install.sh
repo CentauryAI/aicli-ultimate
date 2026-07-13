@@ -283,6 +283,16 @@ resolve_source() {
     curl -fsSL "https://github.com/$REPO_SLUG/archive/refs/heads/$REF.tar.gz" \
       | tar -xz -C "$TEMP_DIR" --strip-components=1
   fi
+  # A piped script can be newer or older than the downloaded tree (e.g. raw
+  # main install.sh + latest release bundle). Run the tree's own installer so
+  # the logic always matches the files it installs.
+  # Run in the foreground (not exec) so this parent process survives to fire its
+  # own EXIT trap and remove TEMP_DIR, regardless of the child installer's version.
+  if [[ -z "${AICLI_ULTIMATE_BOOTSTRAPPED:-}" && -f "$TEMP_DIR/install.sh" ]]; then
+    export AICLI_ULTIMATE_BOOTSTRAPPED=1
+    bash "$TEMP_DIR/install.sh"
+    exit $?
+  fi
   ROOT="$TEMP_DIR"
 }
 
@@ -1204,13 +1214,6 @@ mkdir -p "$INSTALL_DIR" "$CONFIG_HOME" "$BIN_DIR"
 MANIFEST="$CONFIG_HOME/manifest.txt"
 NEW_MANIFEST="$CONFIG_HOME/manifest.txt.new"
 : >"$NEW_MANIFEST"
-if [[ "$ROOT" != "$INSTALL_DIR" ]]; then
-  (cd "$ROOT" && tar --exclude=.git -cf - .) | (cd "$INSTALL_DIR" && tar -xf -)
-fi
-printf '%s\n' "$RELEASE_VERSION" >"$INSTALL_DIR/VERSION"
-
-install_owned_file "$ROOT/scripts/aicli" "$BIN_DIR/aicli"
-[[ -e "$BIN_DIR/aicli.aicli-ultimate-owned" ]] && chmod +x "$BIN_DIR/aicli"
 
 # Written twice: before the remaining file operations ("complete": false) so
 # an interrupted run still leaves a usable aicli/update state, and again at
@@ -1258,6 +1261,14 @@ write_state() {
 EOF
 }
 write_state false
+
+if [[ "$ROOT" != "$INSTALL_DIR" ]]; then
+  (cd "$ROOT" && tar --exclude=.git -cf - .) | (cd "$INSTALL_DIR" && tar -xf -)
+fi
+printf '%s\n' "$RELEASE_VERSION" >"$INSTALL_DIR/VERSION"
+
+install_owned_file "$ROOT/scripts/aicli" "$BIN_DIR/aicli"
+[[ -e "$BIN_DIR/aicli.aicli-ultimate-owned" ]] && chmod +x "$BIN_DIR/aicli"
 
 render_agents "$ROOT/config/AGENTS.md" "$CONFIG_HOME/global-instructions.md"
 

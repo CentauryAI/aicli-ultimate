@@ -653,4 +653,25 @@ INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
 INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
   bash -c 'source "$1"; ! feature_changed completions' _ "$TMP/feature-changed.sh"
 
+# A standalone (piped) installer runs the downloaded tree's own installer in the
+# foreground so script logic and bundle files can never skew, and the parent's
+# EXIT trap always removes the staged bundle regardless of the child's version.
+mkdir -p "$TMP/boot-bin" "$TMP/boot-run" "$TMP/boot-home" "$TMP/boot-tmp" "$TMP/boot-bundle/aicli-ultimate/config"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "BOOTSTRAPPED-OK ${AICLI_ULTIMATE_BOOTSTRAPPED:-unset}"' \
+  >"$TMP/boot-bundle/aicli-ultimate/install.sh"
+touch "$TMP/boot-bundle/aicli-ultimate/config/ultimate.config.toml"
+tar -czf "$TMP/boot-bundle.tar.gz" -C "$TMP/boot-bundle" aicli-ultimate
+printf '%s\n' '#!/bin/sh' 'exec cat "$BOOT_BUNDLE"' >"$TMP/boot-bin/curl"
+chmod +x "$TMP/boot-bin/curl"
+cp "$ROOT/install.sh" "$TMP/boot-run/install.sh"
+# HOME/XDG sandboxed so a regressed re-exec fails the grep without touching the
+# developer's real install; TMPDIR isolated so the leak check below is precise.
+BOOT_BUNDLE="$TMP/boot-bundle.tar.gz" TMPDIR="$TMP/boot-tmp" \
+  HOME="$TMP/boot-home" XDG_CONFIG_HOME="$TMP/boot-home/.config" \
+  PATH="$TMP/boot-bin:/usr/bin:/bin" \
+  bash "$TMP/boot-run/install.sh" >"$TMP/boot.out" 2>&1
+grep -q 'BOOTSTRAPPED-OK 1' "$TMP/boot.out"
+# The staged bundle must not leak: parent's EXIT trap removed its TEMP_DIR.
+[[ -z "$(find "$TMP/boot-tmp" -maxdepth 1 -name 'aicli-ultimate.*' 2>/dev/null)" ]]
+
 printf 'All tests passed.\n'
