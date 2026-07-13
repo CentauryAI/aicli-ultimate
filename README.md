@@ -182,6 +182,8 @@ Claude plugins include their upstream `SessionStart`, `UserPromptSubmit`, and su
 
 The optional `orquestrator-hcom` skill delegates work through [hcom](https://github.com/aannoo/hcom). It enables pure delegation, threaded worker/reviewer coordination, event-driven monitoring, and CentauryAI-safe branch/PR rules. AI CLI Ultimate installs the portable skill only; install HCOM separately from its upstream repository, and let HCOM manage its own hooks.
 
+See the [Orquestrator agent setup and operating guide](docs/orquestrator-agent-setup.md) for recommended pool sizes, tool routing, coordinator visibility, and ready-to-use delegation and review templates.
+
 ### Activate Orquestrator mode
 
 1. Select **HCOM Orquestrator mode** in the AI CLI Ultimate installer.
