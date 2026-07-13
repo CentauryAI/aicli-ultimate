@@ -634,9 +634,23 @@ HOME="$TMP/update-home" \
 XDG_CONFIG_HOME="$TMP/update-home/.config" \
 CODEX_HOME="$TMP/update-home/.codex" \
 AICLI_ULTIMATE_UPDATE=1 \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
 AICLI_ULTIMATE_DRY_RUN=1 \
   bash "$ROOT/install.sh" >"$TMP/update-plan.out"
 grep -q 'targets: codex=1 claude=0 opencode=1 omp=0 antigravity=0' "$TMP/update-plan.out"
 grep -q 'effort=high statusline=0 lsp=0 caveman=1/0 ponytail=1/1 orquestrator=0' "$TMP/update-plan.out"
+
+# feature_changed locks only bundle features whose files differ.
+sed -n '/^feature_changed()/,/^}/p' "$ROOT/install.sh" >"$TMP/feature-changed.sh"
+mkdir -p "$TMP/fc-old/plugins/caveman" "$TMP/fc-new/plugins/caveman"
+printf 'a\n' >"$TMP/fc-old/plugins/caveman/SKILL.md"
+printf 'a\n' >"$TMP/fc-new/plugins/caveman/SKILL.md"
+INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
+  bash -c 'source "$1"; ! feature_changed caveman' _ "$TMP/feature-changed.sh"
+printf 'b\n' >"$TMP/fc-new/plugins/caveman/SKILL.md"
+INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
+  bash -c 'source "$1"; feature_changed caveman' _ "$TMP/feature-changed.sh"
+INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
+  bash -c 'source "$1"; ! feature_changed completions' _ "$TMP/feature-changed.sh"
 
 printf 'All tests passed.\n'

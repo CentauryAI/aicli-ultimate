@@ -29,6 +29,11 @@ newer() {
   [[ "$1" != "$2" && "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$2" ]]
 }
 
+# False when the last installer run was interrupted before finalizing.
+install_complete() {
+  ! grep -q '"complete": false' "$STATE_FILE" 2>/dev/null
+}
+
 cmd_update() {
   local installed latest
   installed="$(installed_release)"
@@ -44,10 +49,14 @@ cmd_update() {
     return 0
   fi
   if ! newer "$installed" "$latest"; then
-    printf 'Already up to date (%s). Nothing reinstalled.\n' "$installed"
-    return 0
+    if install_complete; then
+      printf 'Already up to date (%s). Nothing reinstalled.\n' "$installed"
+      return 0
+    fi
+    printf 'The previous %s install was interrupted; repairing.\n' "$installed"
+  else
+    printf 'Updating aicli-ultimate %s -> %s\n' "$installed" "$latest"
   fi
-  printf 'Updating aicli-ultimate %s -> %s (reusing your saved selections)\n' "$installed" "$latest"
   curl -fsSL "https://raw.githubusercontent.com/$REPO_SLUG/$latest/install.sh" \
     | AICLI_ULTIMATE_UPDATE=1 AICLI_ULTIMATE_REF="$latest" bash
   rm -f "$CACHE_FILE"
@@ -119,8 +128,10 @@ usage() {
 aicli — AI CLI Ultimate helper
 
 Usage:
-  aicli update            Update to the latest release (skips everything when
-                          already current; reuses your saved install selections)
+  aicli update            Update to the latest release. Exits when already
+                          current; otherwise shows the checklist pre-filled
+                          from your saved selections (changed features locked
+                          as UPDATE, new features unselected)
   aicli update --check    Only report whether an update exists
   aicli docs [name]       Browse the bundled documentation in the terminal
   aicli version           Show the installed release

@@ -84,7 +84,7 @@ Git semver tags are the release version source. The release workflow writes the 
 
 The installer places an `aicli` helper in `~/.local/bin`:
 
-- `aicli update` checks the latest GitHub release and exits immediately when you are already current. When a newer release exists it reruns the installer non-interactively with the selections saved from your previous install — no checklist, no reinstalling features you never chose.
+- `aicli update` checks the latest GitHub release and exits immediately when you are already current (it also repairs an installation whose previous run was interrupted). When a newer release exists it reruns the installer in update mode: the checklist opens pre-filled from your saved selections instead of from scratch — features you had installed stay selected (deselect one to uninstall it), features whose bundled files changed in the new release appear highlighted as `— UPDATE` and cannot be deselected, and features new to the release appear unselected for you to opt in. Cancelling the checklist aborts the update without changes. Without a terminal (or with the `whiptail` fallback, which cannot lock items) the saved selections are reused as-is.
 - `aicli update --check` only reports whether an update exists.
 - `aicli docs [name]` browses the bundled documentation (README and `docs/`) in the terminal; it renders markdown with [glow](https://github.com/charmbracelet/glow) when installed and falls back to your pager. Example: `aicli docs orquestrator`.
 - `aicli notify` runs at shell startup (added to the managed shell block): it prints a one-line hint when a newer release exists, using a local cache refreshed in the background at most once per day, so it never slows the prompt.
