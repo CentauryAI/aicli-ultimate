@@ -719,6 +719,48 @@ INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
 INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
   bash -c 'source "$1"; ! feature_changed completions' _ "$TMP/feature-changed.sh"
 
+# feature_changed recognizes Orquestrator plugin updates.
+mkdir -p "$TMP/fc-old/plugins/orquestrator" "$TMP/fc-new/plugins/orquestrator"
+printf 'a\n' >"$TMP/fc-old/plugins/orquestrator/SKILL.md"
+printf 'a\n' >"$TMP/fc-new/plugins/orquestrator/SKILL.md"
+INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
+  bash -c 'source "$1"; ! feature_changed orquestrator' _ "$TMP/feature-changed.sh"
+printf 'b\n' >"$TMP/fc-new/plugins/orquestrator/SKILL.md"
+INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
+  bash -c 'source "$1"; feature_changed orquestrator' _ "$TMP/feature-changed.sh"
+mkdir -p "$TMP/fc-new/plugins/orquestrator/references"
+printf 'c\n' >"$TMP/fc-new/plugins/orquestrator/references/handoff-protocol.md"
+INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
+  bash -c 'source "$1"; feature_changed orquestrator' _ "$TMP/feature-changed.sh"
+
+# Update mode with Orquestrator enabled asserts forced refresh label.
+mkdir -p "$TMP/update-orq-home/.config/aicli-ultimate"
+cat >"$TMP/update-orq-home/.config/aicli-ultimate/install-state.json" <<'EOF'
+{
+  "version": 1,
+  "release": "v0.0.1",
+  "selections": {
+    "TARGET_CODEX": 1, "TARGET_CLAUDE": 0, "TARGET_OPENCODE": 0, "TARGET_OMP": 0,
+    "TARGET_ANTIGRAVITY": 0, "EFFORT": "high", "STATUSLINE": 0, "LSP": 0,
+    "CAVEMAN": 1, "CAVEMAN_ALWAYS": 0, "PONYTAIL": 1, "PONYTAIL_ALWAYS": 0,
+    "ORQUESTRATOR": 1, "SUPERPOWERS": 0, "CENTAURY": 1, "COMPLETIONS": 0,
+    "SECURITY": 0, "FRONTEND": 0, "PLAYWRIGHT": 0, "REACT": 0, "WEBAPP": 0,
+    "MCPBUILDER": 0, "GRILLDOCS": 0, "SECBP": 0, "DIFFREVIEW": 0, "GHFIXCI": 0
+  }
+}
+EOF
+HOME="$TMP/update-orq-home" \
+XDG_CONFIG_HOME="$TMP/update-orq-home/.config" \
+CODEX_HOME="$TMP/update-orq-home/.codex" \
+AICLI_ULTIMATE_UPDATE=1 \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+AICLI_ULTIMATE_DRY_RUN=1 \
+  bash "$ROOT/install.sh" >"$TMP/update-orq-plan.out"
+grep -q 'orquestrator=1' "$TMP/update-orq-plan.out"
+
+# feature_changed maps orquestrator to plugins/orquestrator and detects changes.
+# This validates the installer's update detection logic for the plugin path.
+
 # A standalone (piped) installer runs the downloaded tree's own installer in the
 # foreground so script logic and bundle files can never skew, and the parent's
 # EXIT trap always removes the staged bundle regardless of the child's version.
