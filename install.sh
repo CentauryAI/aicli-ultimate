@@ -264,7 +264,7 @@ run_tui() {
 resolve_source() {
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
-  if [[ -f "$script_dir/config/ultimate.config.toml" ]]; then
+  if [[ -f "${BASH_SOURCE[0]:-}" && -f "$script_dir/config/ultimate.config.toml" ]]; then
     ROOT="$script_dir"
     return
   fi
