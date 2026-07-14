@@ -407,9 +407,21 @@ render_agents() {
     "$source" >"$target"
 }
 
+retain_owned_file() {
+  local target="$1"
+  if [[ -e "$target" && -e "$target.aicli-ultimate-owned" ]]; then
+    printf '%s\n' "$target" >>"$NEW_MANIFEST"
+  fi
+}
+
 install_language_servers() {
   local packages=()
-  [[ "$LSP" == 1 && "$OFFLINE" != 1 ]] || return 0
+  [[ "$LSP" == 1 ]] || return 0
+  retain_owned_file "$GITHUB_LSP_BIN"
+  if [[ "$TARGET_CODEX" == 1 || "$TARGET_ANTIGRAVITY" == 1 ]]; then
+    retain_owned_file "$MCPLS_BIN"
+  fi
+  [[ "$OFFLINE" != 1 ]] || return 0
 
   if ! command -v rust-analyzer >/dev/null 2>&1; then
     if command -v rustup >/dev/null 2>&1; then
@@ -839,6 +851,7 @@ configure_centaury_guard() {
   add_git_include 'hasconfig:remote.*.url:ssh://git@github.com/CentauryAI/**' "$guard_config"
   add_git_include 'hasconfig:remote.*.url:https://github.com/CentuaryAI/**' "$guard_config"
   add_git_include 'hasconfig:remote.*.url:git@github.com:CentuaryAI/**' "$guard_config"
+  add_git_include 'hasconfig:remote.*.url:ssh://git@github.com/CentuaryAI/**' "$guard_config"
 }
 
 install_plugin() {
@@ -1277,18 +1290,20 @@ if [[ "$LSP" == 1 && ( "$TARGET_CODEX" == 1 || "$TARGET_ANTIGRAVITY" == 1 ) ]]; 
 fi
 step "Language servers"
 install_language_servers
-if [[ "$LSP" == 1 ]] && { [[ "$OFFLINE" == 1 ]] \
-  || { [[ -x "$MCPLS_BIN" && -f "$MCPLS_BIN.aicli-ultimate-owned" ]] \
-    && "$MCPLS_BIN" --version 2>/dev/null | grep -Eq "^mcpls ${MCPLS_VERSION}([[:space:]]|$)"; }; }; then
+if [[ "$LSP" == 1 && -x "$MCPLS_BIN" && -f "$MCPLS_BIN.aicli-ultimate-owned" ]] \
+  && "$MCPLS_BIN" --version 2>/dev/null | grep -Eq "^mcpls ${MCPLS_VERSION}([[:space:]]|$)"; then
   BRIDGE_READY=1
 else
   BRIDGE_READY=0
 fi
-if [[ "$LSP" == 1 ]] && { [[ "$OFFLINE" == 1 ]] \
-  || command -v github-lsp >/dev/null 2>&1 || [[ -x "$GITHUB_LSP_BIN" ]]; }; then
-  GITHUB_LSP_READY=1
-else
-  GITHUB_LSP_READY=0
+GITHUB_LSP_READY=0
+if [[ "$LSP" == 1 ]]; then
+  if [[ -x "$GITHUB_LSP_BIN" && -f "$GITHUB_LSP_BIN.aicli-ultimate-owned" ]]; then
+    [[ "$(cat "$GITHUB_LSP_BIN.aicli-ultimate-owned")" == "$GITHUB_LSP_VERSION" ]] \
+      && GITHUB_LSP_READY=1
+  elif command -v github-lsp >/dev/null 2>&1; then
+    GITHUB_LSP_READY=1
+  fi
 fi
 if [[ "$GITHUB_LSP_READY" == 1 && "$OFFLINE" != 1 ]]; then
   if ! command -v gh >/dev/null 2>&1; then

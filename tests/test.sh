@@ -173,7 +173,45 @@ for manifest in "$ROOT"/plugins/*/.codex-plugin/plugin.json; do
   python3 -m json.tool "$manifest" >/dev/null
 done
 
+# Fresh offline installs must not register missing LSP bridge commands.
+mkdir -p "$TMP/offline-home/.codex" "$TMP/offline-home/.config/opencode"
+mkdir -p "$TMP/offline-bin"
+for command in awk bash basename cat chmod cp cut date dirname env find git grep head \
+  mkdir mktemp mv python3 rm rmdir sed sort tail tar touch tr uname wc; do
+  ln -s "$(command -v "$command")" "$TMP/offline-bin/$command"
+done
+for command in codex opencode omp agy; do
+  printf '%s\n' '#!/bin/sh' 'exit 0' >"$TMP/offline-bin/$command"
+  chmod +x "$TMP/offline-bin/$command"
+done
+HOME="$TMP/offline-home" \
+XDG_CONFIG_HOME="$TMP/offline-home/.config" \
+CODEX_HOME="$TMP/offline-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/offline-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/offline-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+AICLI_ULTIMATE_OFFLINE=1 \
+AICLI_ULTIMATE_TARGETS=codex,opencode,omp,antigravity \
+PATH="$TMP/offline-bin" \
+SHELL=/bin/bash \
+  "$ROOT/install.sh" >/dev/null 2>&1
+grep -q '^enabled = false$' "$TMP/offline-home/.codex/aicli-ultimate.config.toml"
+test ! -e "$TMP/offline-home/.gemini/config/plugins/aicli-ultimate/mcp_config.json"
+jq -e '.lsp == true and .permission.lsp == "allow"' \
+  "$TMP/offline-home/.config/opencode/opencode.json" >/dev/null
+test ! -e "$TMP/offline-home/.omp/agent/lsp.json"
+
 mkdir -p "$TMP/home/.claude" "$TMP/home/.codex/agents" "$TMP/home/.config/opencode" "$TMP/home/.gemini/antigravity-cli"
+mkdir -p "$TMP/home/.local/bin" "$TMP/home/.config/aicli-ultimate"
+printf '%s\n' '#!/bin/sh' 'printf "mcpls 0.3.7\n"' >"$TMP/home/.local/bin/aicli-mcpls"
+printf '%s\n' '#!/bin/sh' 'exit 0' >"$TMP/home/.local/bin/github-lsp"
+chmod +x "$TMP/home/.local/bin/aicli-mcpls" "$TMP/home/.local/bin/github-lsp"
+touch "$TMP/home/.local/bin/aicli-mcpls.aicli-ultimate-owned"
+printf '24.03.10\n' >"$TMP/home/.local/bin/github-lsp.aicli-ultimate-owned"
+printf '%s\n' \
+  "$TMP/home/.local/bin/aicli-mcpls" \
+  "$TMP/home/.local/bin/github-lsp" \
+  >"$TMP/home/.config/aicli-ultimate/manifest.txt"
 printf '[tui]\ntheme = "custom"\n' >"$TMP/home/.codex/config.toml"
 python3 "$ROOT/scripts/codex_statusline.py" install \
   "$TMP/home/.codex/config.toml" "$TMP/home/.config/aicli-ultimate/codex-statusline-state.json"
@@ -207,6 +245,10 @@ test -f "$TMP/home/.config/aicli-ultimate/codex-bin/codex.aicli-ultimate-owned"
 test -x "$TMP/home/.local/bin/aicli-ultimate-status"
 test -x "$TMP/home/.local/bin/claude-ultimate-status"
 test -x "$TMP/home/.local/bin/antigravity-ultimate-status"
+test -x "$TMP/home/.local/bin/aicli-mcpls"
+test -x "$TMP/home/.local/bin/github-lsp"
+grep -Fxq "$TMP/home/.local/bin/aicli-mcpls" "$TMP/home/.config/aicli-ultimate/manifest.txt"
+grep -Fxq "$TMP/home/.local/bin/github-lsp" "$TMP/home/.config/aicli-ultimate/manifest.txt"
 grep -q -- '--profile' "$TMP/home/.local/bin/aicli-ultimate"
 grep -q 'model_reasoning_effort = "xhigh"' "$TMP/home/.codex/aicli-ultimate.config.toml"
 grep -q '^theme = "custom"$' "$TMP/home/.codex/config.toml"
@@ -434,15 +476,19 @@ if command -v codex >/dev/null 2>&1; then
   ! grep -q 'malformed agent role definition' "$TMP/codex.err"
 fi
 
-mkdir -p "$TMP/company" "$TMP/personal"
+mkdir -p "$TMP/company" "$TMP/legacy-company" "$TMP/personal"
 git -C "$TMP/company" init -q -b main
 git -C "$TMP/company" remote add origin https://github.com/CentauryAI/example.git
+git -C "$TMP/legacy-company" init -q -b main
+git -C "$TMP/legacy-company" remote add origin ssh://git@github.com/CentuaryAI/example.git
 git -C "$TMP/personal" init -q -b main
 git -C "$TMP/personal" remote add origin https://github.com/example/example.git
 
 company_hooks="$(HOME="$TMP/home" git -C "$TMP/company" config --get core.hooksPath)"
+legacy_company_hooks="$(HOME="$TMP/home" git -C "$TMP/legacy-company" config --get core.hooksPath)"
 personal_hooks="$(HOME="$TMP/home" git -C "$TMP/personal" config --get core.hooksPath || true)"
 test "$company_hooks" = "$TMP/home/.config/aicli-ultimate/git-hooks"
+test "$legacy_company_hooks" = "$TMP/home/.config/aicli-ultimate/git-hooks"
 test -z "$personal_hooks"
 
 touch "$TMP/company/tracked"
@@ -472,6 +518,9 @@ AICLI_ULTIMATE_INSTALL_DIR="$TMP/home/.local/share/aicli-ultimate" \
 AICLI_ULTIMATE_BIN_DIR="$TMP/home/.local/bin" \
 AICLI_ULTIMATE_NONINTERACTIVE=1 \
   "$TMP/home/.local/share/aicli-ultimate/uninstall.sh" >/dev/null
+test -z "$(HOME="$TMP/home" git -C "$TMP/legacy-company" config --get core.hooksPath || true)"
+! HOME="$TMP/home" git config --global --get-all \
+  'includeIf.hasconfig:remote.*.url:ssh://git@github.com/CentuaryAI/**.path' >/dev/null
 jq -e '.custom == "preserved" and .statusLine.command == "legacy-status"' \
   "$TMP/home/.claude/settings.json" >/dev/null
 jq -e '.custom == "preserved" and .statusLine.command == "legacy-agy"' \
