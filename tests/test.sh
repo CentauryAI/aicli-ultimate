@@ -325,7 +325,58 @@ for skill in \
   grep -q '通信：凡 worker/orchestrator 消息，用 Caveman wenyan-ultra；code、commands、paths、identifiers、output、errors，逐字保之。' "$skill"
   ! grep -q 'communication: use Caveman wenyan-ultra' "$skill"
   grep -q 'request one reformatted reply with the contract repeated' "$skill"
+  grep -q 'Mode lifecycle' "$skill"
+  grep -q 'CAPS v1' "$skill"
+  grep -q 'Mode gate' "$skill"
+  grep -q 'Workflow depth' "$skill"
+  grep -q 'Decision gate' "$skill"
+  grep -q 'Deliberation' "$skill"
+  grep -q 'Peer messaging' "$skill"
+  grep -q 'Progress reporting' "$skill"
+  grep -q 'Worker bootstrap' "$skill"
+  grep -q 'Capacity scan' "$skill"
+  grep -q 'No global filesystem cache' "$skill"
+  grep -q 'session_id empty or changed' "$skill"
+  grep -q 'Token discipline' "$skill"
+  ! grep -q '~/.claude/.orchestrator-mode' "$skill"
+  ! grep -q 'UserPromptSubmit' "$skill"
 done
+for ref in \
+  "$TMP/home/.claude/skills/orquestrator-hcom/references/handoff-protocol.md" \
+  "$TMP/home/.agents/skills/orquestrator-hcom/references/handoff-protocol.md" \
+  "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/orquestrator-hcom/references/handoff-protocol.md"; do
+  test -f "$ref"
+  grep -q 'Per-task handoff template fields' "$ref"
+  grep -q 'Bootstrap variants' "$ref"
+  grep -q 'Real coordinator name' "$ref"
+  cmp -s "$ROOT/plugins/orquestrator/skills/orquestrator-hcom/references/handoff-protocol.md" "$ref"
+done
+for ref in \
+  "$TMP/home/.claude/skills/orquestrator-hcom/references/sdd-workflow.md" \
+  "$TMP/home/.agents/skills/orquestrator-hcom/references/sdd-workflow.md" \
+  "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/orquestrator-hcom/references/sdd-workflow.md"; do
+  test -f "$ref"
+  grep -q 'Two-axis mode gate' "$ref"
+  grep -q 'SDD pipeline phases' "$ref"
+  grep -q 'Conditional artifacts' "$ref"
+  cmp -s "$ROOT/plugins/orquestrator/skills/orquestrator-hcom/references/sdd-workflow.md" "$ref"
+done
+cmp -s "$ROOT/plugins/orquestrator/skills/orquestrator-hcom/SKILL.md" \
+  "$TMP/home/.claude/skills/orquestrator-hcom/SKILL.md"
+cmp -s "$ROOT/plugins/orquestrator/skills/orquestrator-hcom/SKILL.md" \
+  "$TMP/home/.agents/skills/orquestrator-hcom/SKILL.md"
+cmp -s "$ROOT/plugins/orquestrator/skills/orquestrator-hcom/SKILL.md" \
+  "$TMP/home/.gemini/config/plugins/aicli-ultimate/skills/orquestrator-hcom/SKILL.md"
+grep -q 'Mode lifecycle' "$ROOT/docs/orquestrator-agent-setup.md"
+grep -q 'CAPS v1' "$ROOT/docs/orquestrator-agent-setup.md"
+grep -q '\-\-hcom-system-prompt' "$ROOT/docs/orquestrator-agent-setup.md"
+grep -q 'Workflow depth' "$ROOT/docs/orquestrator-agent-setup.md"
+grep -q 'Decision gate' "$ROOT/docs/orquestrator-agent-setup.md"
+grep -q 'Peer messaging' "$ROOT/docs/orquestrator-agent-setup.md"
+grep -q 'Independent reviewer' "$ROOT/docs/orquestrator-agent-setup.md"
+test -f "$ROOT/plugins/orquestrator/skills/orquestrator-hcom/references/handoff-protocol.md"
+test -f "$ROOT/plugins/orquestrator/skills/orquestrator-hcom/references/sdd-workflow.md"
+jq -e '.skills == "./skills/"' "$ROOT/plugins/orquestrator/.codex-plugin/plugin.json" >/dev/null
 test -f "$TMP/home/.claude/agents/ultimate-reviewer.md"
 test -f "$TMP/home/.config/opencode/agents/ultimate-reviewer.md"
 test -f "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"

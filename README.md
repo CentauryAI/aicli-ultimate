@@ -223,6 +223,8 @@ See the [Orquestrator agent setup and operating guide](docs/orquestrator-agent-s
 
 Once active, the coordinator does not implement code. It reads `hcom list --json`, selects compatible live workers, delegates bounded ownership, monitors `hcom events`, assigns a different reviewer, verifies the result, and coordinates PR integration. It asks before spawning new external agents and cleans up only agents it created.
 
+The coordinator uses a two-axis mode gate (workflow depth: Direct or SDD; decision gate: none, Deliberation, or Consult) and performs a capacity scan on every user request to match idle agents to useful roles. Idle agents are not a reason to invent work; coordination cost may justify leaving them idle.
+
 ### Worker mode and worker/reviewer pipelines
 
 There is no global **worker mode** toggle. A worker is an agent given a bounded task. Choose the path that matches the role:
