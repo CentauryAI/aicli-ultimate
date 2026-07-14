@@ -364,6 +364,44 @@ hcom codex
 
 Read launch output and `hcom list --json` to obtain exact agent names. Never copy placeholder names from documentation and never guess an agent name.
 
+## Mode lifecycle
+
+Once activated, mode persists for the current conversation until explicit stop. Every user request maintains pure delegation and refreshes live state. A new CLI session requires reactivation. The anti-forget purpose is part of the common contract; host-native hooks are optional.
+
+## CAPS v1
+
+Capability card per worker. Exact format:
+
+```
+CAPS v1 | name=<hcom_name> | tool=<tool> | session=<session_id> | skills=<relevant_skills> | commands=<native_commands> | source=<how_known> | limits=<known_limits>
+```
+
+Query only the selected worker's relevant capabilities. Cache in coordinator context and the same HCOM thread, keyed by exact name/tool/session_id. Recoverable from thread or events transcript after compaction. No global filesystem cache. session_id empty or changed means refresh or invalidate. Unknown capability means no guess.
+
+## Mode gate
+
+Two independent axes:
+
+**Workflow depth**: Direct (bounded, known cause, low risk, few dependent steps) or SDD (new public behavior, multiple dependent steps or subsystems or implementers, architecture or migration or high risk). Few files can still be SDD if risk or complexity warrants it.
+
+**Decision gate**: none, Deliberation (2+ viable approaches, uncertain tradeoff), or Consult (needs human authority, scope, or product choice). Stackable on either workflow depth.
+
+Risk and ambiguity override file count.
+
+## Worker bootstrap
+
+Pre-existing or bare-launched worker: first task or message must contain full compact protocol. If user authorizes spawn, first disclose tool and count plus compact contract; user authorization suffices, no double approval. Check `hcom <tool> --help`; if `--hcom-system-prompt` is listed, use it; otherwise inject via first task message. Do not guess the flag.
+
+## Peer messaging and progress
+
+Peer messaging only for authorized scope, dependency, or deliberation. Same `--thread`. Target peer plus coordinator. No broad broadcast. No overlapping file ownership.
+
+Progress signals: ack on task receipt, meaningful milestone updates, blocker request with exact error, final evidence with branch/commit/files/checks. No timer spam. Dependency report only on state change or block.
+
+## Independent reviewer
+
+On worker completion signal, assign an independent read-only reviewer who is different from the implementer. Event-driven: no idle between implement and verify. Review provides advisory evidence; coordinator or human retains final authority.
+
 ## Operating workflow
 
 ### 1. Inspect and split
@@ -377,40 +415,52 @@ Understand repository policy and working-tree state first. Split work into bound
 - exact checks;
 - no overlap with another worker.
 
-Use lightweight specification-driven development only for large work:
+Use lightweight specification-driven development when the mode gate selects SDD:
 
 ```text
 scope -> proposal -> spec -> tasks -> implementation -> independent verification -> PR
 ```
 
-### 2. Refresh live state
+### 2. Capacity scan
 
-Immediately before delegation:
+On every user request while mode active:
 
-```bash
-hcom list --json
-```
+1. Refresh `hcom list --json` to see current agent state.
+2. Derive independent useful roles from the request: investigation, implementation, test analysis, review, or other bounded functions.
+3. Match compatible idle agents to those roles using tool-aware routing and CAPS v1 relevant skills/commands. Before assignment, refresh status; if chosen capability is unknown, ask or verify, do not guess.
+4. Delegate in parallel only if it materially reduces latency or context usage and file ownership does not overlap.
 
-Choose an exact compatible name from the current result.
+Idle agents alone are not a reason to invent work. Coordination cost may justify leaving agents idle. Do not spawn or assign agents just because they are available.
+
+**Failure guards**:
+
+1. **Stale state**: Agent idle at scan but busy at dispatch. Guard: re-run `hcom list --json` immediately before each dispatch. Status changed? Skip that agent.
+2. **Edit collision**: Two agents write same file. Guard: reserve file scope per agent in task brief. Agent writes nothing outside its list without coordinator approval.
+3. **Busywork masked as productivity**: Agent returns nothing usable. Guard: every role must have verifiable deliverable. Generic or unusable output means FAIL; do not re-dispatch.
 
 ### 3. Send a bounded implementation task
 
 ```bash
 hcom send @exact-worker --intent request --thread feature-x -- \
   'Task: implement <bounded behavior>.
+Workflow depth: <Direct or SDD>.
+Coordinator: <exact hcom name>.
+Documentation owner: <exact worker hcom name or none for Direct>.
 Branch: <task branch>.
 Files owned: <paths>.
 Acceptance: <observable result>.
 Checks: <exact commands>.
 Rules:
-- Before implementation, create WALKTHROUGH.md with intended steps, files, and checks.
-- Record non-obvious choices in DECISIONS.md with reasons and rejected alternatives.
 - Stay inside assigned files and scope; ask before expanding.
 - Report exact failing commands and errors verbatim.
 - Follow repository branch and PR policy; never commit to a protected branch.
 - Report final branch, commit, changed files, and check results.
 通信：凡 worker/orchestrator 消息，用 Caveman wenyan-ultra；code、commands、paths、identifiers、output、errors，逐字保之。'
 ```
+
+**Artifact rules by workflow depth**:
+- **Direct**: No mandatory artifacts. Worker reports via HCOM only.
+- **SDD**: Only the designated documentation owner creates task-scoped artifacts (e.g., `docs/tasks/<thread>/WALKTHROUGH.md` and `DECISIONS.md`). All other workers send non-obvious decisions and evidence to coordinator and doc owner via same HCOM thread, never edit shared files.
 
 The final Chinese line is the exact compact worker-communication contract required by the installed skill. Keep code, commands, paths, identifiers, output, and errors verbatim even when prose is compressed.
 
