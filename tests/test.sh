@@ -733,7 +733,7 @@ printf 'c\n' >"$TMP/fc-new/plugins/orquestrator/references/handoff-protocol.md"
 INSTALL_DIR="$TMP/fc-old" ROOT="$TMP/fc-new" \
   bash -c 'source "$1"; feature_changed orquestrator' _ "$TMP/feature-changed.sh"
 
-# Update mode with Orquestrator enabled asserts forced refresh label.
+# Update mode with Orquestrator enabled preserves saved selection.
 mkdir -p "$TMP/update-orq-home/.config/aicli-ultimate"
 cat >"$TMP/update-orq-home/.config/aicli-ultimate/install-state.json" <<'EOF'
 {
@@ -757,6 +757,91 @@ AICLI_ULTIMATE_NONINTERACTIVE=1 \
 AICLI_ULTIMATE_DRY_RUN=1 \
   bash "$ROOT/install.sh" >"$TMP/update-orq-plan.out"
 grep -q 'orquestrator=1' "$TMP/update-orq-plan.out"
+
+# run_tui behavioral test: mock TUI captures items array with — UPDATE label.
+# Extract functions from install.sh and exercise run_tui with UPDATE_MODE=1.
+sed -n '/^checklist_var()/,/^}/p; /^feature_changed()/,/^}/p; /^run_tui()/,/^}/p' "$ROOT/install.sh" >"$TMP/tui-functions.sh"
+
+# Create old/new plugin dirs that differ to trigger feature_changed.
+mkdir -p "$TMP/tui-old/plugins/orquestrator" "$TMP/tui-new/plugins/orquestrator"
+printf 'old\n' >"$TMP/tui-old/plugins/orquestrator/SKILL.md"
+printf 'new\n' >"$TMP/tui-new/plugins/orquestrator/SKILL.md"
+
+# Mock TUI records argv to file and returns "orquestrator" selection.
+printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$@" >"$MOCK_TUI_LOG"' 'printf "orquestrator\n"' >"$TMP/mock-tui"
+chmod +x "$TMP/mock-tui"
+
+# Run run_tui with UPDATE_MODE=1, ORQUESTRATOR=1, TUI_BIN=mock, and differing plugins.
+# Use Python pty to provide /dev/tty for run_tui's stdin redirect.
+python3 - "$TMP/tui-functions.sh" "$TMP/tui-old" "$TMP/tui-new" "$TMP/mock-tui" "$TMP/mock-tui.log" <<'PY'
+import errno, os, pty, sys
+
+tui_functions = sys.argv[1]
+install_dir = sys.argv[2]
+root = sys.argv[3]
+mock_tui = sys.argv[4]
+mock_tui_log = sys.argv[5]
+
+env = os.environ.copy()
+env.update({
+    'INSTALL_DIR': install_dir,
+    'ROOT': root,
+    'UPDATE_MODE': '1',
+    'ORQUESTRATOR': '1',
+    'TUI_BIN': mock_tui,
+    'MOCK_TUI_LOG': mock_tui_log,
+    'TARGET_CODEX': '0', 'TARGET_CLAUDE': '0', 'TARGET_OPENCODE': '0',
+    'TARGET_OMP': '0', 'TARGET_ANTIGRAVITY': '0',
+    'STATUSLINE': '0', 'LSP': '0', 'CAVEMAN': '0', 'CAVEMAN_ALWAYS': '0',
+    'PONYTAIL': '0', 'PONYTAIL_ALWAYS': '0', 'SUPERPOWERS': '0',
+    'CENTAURY': '0', 'COMPLETIONS': '0', 'SECURITY': '0', 'FRONTEND': '0',
+    'PLAYWRIGHT': '0', 'REACT': '0', 'WEBAPP': '0', 'MCPBUILDER': '0',
+    'GRILLDOCS': '0', 'SECBP': '0', 'DIFFREVIEW': '0', 'GHFIXCI': '0'
+})
+
+pid, master = pty.fork()
+if pid == 0:
+    os.execve("/bin/bash", ["/bin/bash", "-c", f'source "{tui_functions}"; run_tui'], env)
+
+output = b''
+while True:
+    try:
+        chunk = os.read(master, 4096)
+        if not chunk:
+            break
+        output += chunk
+    except OSError as e:
+        if e.errno == errno.EIO:
+            break
+        raise
+
+_, status = os.waitpid(pid, 0)
+exit_code = os.waitstatus_to_exitcode(status)
+if exit_code != 0:
+    print(f"run_tui failed with exit code {exit_code}", file=sys.stderr)
+    print(output.decode('utf-8', errors='replace'), file=sys.stderr)
+    sys.exit(1)
+PY
+
+# Verify the mock TUI received the exact adjacent triplet.
+grep -Fq 'orquestrator' "$TMP/mock-tui.log"
+grep -Fq 'HCOM Orquestrator mode — UPDATE' "$TMP/mock-tui.log"
+grep -Fq 'LOCKED' "$TMP/mock-tui.log"
+
+# Verify triplet is adjacent (orquestrator, description, state).
+python3 - "$TMP/mock-tui.log" <<'PY'
+import sys
+args = open(sys.argv[1]).read().strip().split('\n')
+# Find orquestrator tag
+for i, arg in enumerate(args):
+    if arg == 'orquestrator':
+        # Check next two args are description and LOCKED
+        if i + 2 < len(args):
+            if 'HCOM Orquestrator mode — UPDATE' in args[i+1] and args[i+2] == 'LOCKED':
+                sys.exit(0)
+print("Triplet not found or not adjacent", file=sys.stderr)
+sys.exit(1)
+PY
 
 # feature_changed maps orquestrator to plugins/orquestrator and detects changes.
 # This validates the installer's update detection logic for the plugin path.
