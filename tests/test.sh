@@ -356,6 +356,9 @@ for ref in \
   grep -q 'Per-task handoff template fields' "$ref"
   grep -q 'Bootstrap variants' "$ref"
   grep -q 'Real coordinator name' "$ref"
+  grep -q 'Workflow depth:' "$ref"
+  grep -q 'Coordinator:' "$ref"
+  grep -q 'Documentation owner:' "$ref"
   cmp -s "$ROOT/plugins/orquestrator/skills/orquestrator-hcom/references/handoff-protocol.md" "$ref"
 done
 for ref in \
@@ -381,6 +384,8 @@ grep -q 'Workflow depth' "$ROOT/docs/orquestrator-agent-setup.md"
 grep -q 'Decision gate' "$ROOT/docs/orquestrator-agent-setup.md"
 grep -q 'Peer messaging' "$ROOT/docs/orquestrator-agent-setup.md"
 grep -q 'Independent reviewer' "$ROOT/docs/orquestrator-agent-setup.md"
+! grep -q 'Before implementation, create WALKTHROUGH.md' "$ROOT/docs/orquestrator-agent-setup.md"
+! grep -q 'Record non-obvious choices in DECISIONS.md' "$ROOT/docs/orquestrator-agent-setup.md"
 test -f "$ROOT/plugins/orquestrator/skills/orquestrator-hcom/references/handoff-protocol.md"
 test -f "$ROOT/plugins/orquestrator/skills/orquestrator-hcom/references/sdd-workflow.md"
 jq -e '.skills == "./skills/"' "$ROOT/plugins/orquestrator/.codex-plugin/plugin.json" >/dev/null

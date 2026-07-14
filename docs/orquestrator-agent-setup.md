@@ -443,19 +443,24 @@ Idle agents alone are not a reason to invent work. Coordination cost may justify
 ```bash
 hcom send @exact-worker --intent request --thread feature-x -- \
   'Task: implement <bounded behavior>.
+Workflow depth: <Direct or SDD>.
+Coordinator: <exact hcom name>.
+Documentation owner: <exact worker hcom name or none for Direct>.
 Branch: <task branch>.
 Files owned: <paths>.
 Acceptance: <observable result>.
 Checks: <exact commands>.
 Rules:
-- Before implementation, create WALKTHROUGH.md with intended steps, files, and checks.
-- Record non-obvious choices in DECISIONS.md with reasons and rejected alternatives.
 - Stay inside assigned files and scope; ask before expanding.
 - Report exact failing commands and errors verbatim.
 - Follow repository branch and PR policy; never commit to a protected branch.
 - Report final branch, commit, changed files, and check results.
 通信：凡 worker/orchestrator 消息，用 Caveman wenyan-ultra；code、commands、paths、identifiers、output、errors，逐字保之。'
 ```
+
+**Artifact rules by workflow depth**:
+- **Direct**: No mandatory artifacts. Worker reports via HCOM only.
+- **SDD**: Only the designated documentation owner creates task-scoped artifacts (e.g., `docs/tasks/<thread>/WALKTHROUGH.md` and `DECISIONS.md`). All other workers send non-obvious decisions and evidence to coordinator and doc owner via same HCOM thread, never edit shared files.
 
 The final Chinese line is the exact compact worker-communication contract required by the installed skill. Keep code, commands, paths, identifiers, output, and errors verbatim even when prose is compressed.
 

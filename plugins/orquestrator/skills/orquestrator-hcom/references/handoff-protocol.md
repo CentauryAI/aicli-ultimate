@@ -9,6 +9,8 @@ Every task delegation MUST include:
 | Field | Description |
 |-------|-------------|
 | **goal** | What the task achieves (one sentence). |
+| **workflow_depth** | Direct or SDD. Determines artifact requirements. |
+| **coordinator** | Exact hcom name of the coordinator. Workers report to this name. |
 | **scope/files/ownership** | Exact file paths the worker owns. No overlap with other workers. |
 | **acceptance** | Observable result that proves task is done. |
 | **checks** | Exact commands to verify acceptance (tests, lint, build). |
@@ -16,13 +18,16 @@ Every task delegation MUST include:
 | **dependencies/peers** | Other workers this task depends on, or peers to coordinate with. |
 | **report format** | How worker reports progress and completion (see Progress reporting in SKILL.md). |
 | **branch/commit rules** | Task branch name, conventional commit format. |
-| **documentation owner** | For SDD: coordinator assigns exactly one worker as documentation owner for task-scoped artifacts (e.g., `docs/tasks/<thread>/`). All other workers send decisions/evidence to coordinator + doc owner via same HCOM thread, never edit shared files. Direct: no doc owner needed. Root files only if repo/user explicitly chooses and assigns one owner. |
+| **documentation_owner** | For SDD: exact hcom name of the single documentation owner. Direct: none. Only this worker creates task-scoped artifacts; all others send decisions/evidence via HCOM thread. |
 | **communication contract** | Caveman wenyan-ultra for HCOM messages. Coordinator translates to human. |
 
 ## Template
 
 ```
 Task: <goal>
+Workflow depth: <Direct or SDD>
+Coordinator: <exact hcom name>
+Documentation owner: <exact worker hcom name or none for Direct>
 Branch: <task-branch>
 Files owned: <paths>
 Acceptance: <observable result>
