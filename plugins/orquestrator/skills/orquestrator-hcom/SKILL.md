@@ -189,12 +189,15 @@ Peer messaging only for authorized scope, dependency, or deliberation. Same `--t
 
 Include these rules in every delegation message:
 
-1. Before implementing, create `WALKTHROUGH.md` on the task branch: intended steps, files to touch, checks to run.
-2. Record every non-obvious choice in `DECISIONS.md`: what, why, alternatives rejected.
+1. Stay within the assigned file ownership and scope; ask before expanding.
+2. Follow repository branch/PR policy; never commit to protected branches.
 3. Report exact failing commands and verbatim errors; never summarize failures away.
-4. Stay within the assigned file ownership and scope; ask before expanding.
-5. Follow repository branch/PR policy; never commit to protected branches.
-6. Report dependency status only on state change or block. Never wait silent when blocked.
+4. Report dependency status only on state change or block. Never wait silent when blocked.
+
+Artifacts are conditional on workflow depth:
+
+- **Direct**: No forced artifacts. Worker reports via HCOM only.
+- **SDD**: Coordinator assigns exactly one worker as documentation owner for repo-conventional task-scoped artifacts (e.g., `docs/tasks/<thread>/WALKTHROUGH.md` and `DECISIONS.md`, or equivalent path per repo convention). All other workers do not edit these files; they send non-obvious decisions and evidence to coordinator and doc owner via same HCOM thread. Root-level project docs only if repo/user explicitly chooses and assigns one owner, not universal.
 
 ## Progress reporting
 
@@ -223,7 +226,7 @@ Portable rules only:
 - Never edit implementation files in orchestrator thread.
 - Never hardcode agent names. Read names from `hcom list` or launch output.
 - Monitor with `hcom events`; read full transcripts only when evidence is needed.
-- Kill coordinator-owned agents only after work is safely recorded (branch pushed, commit visible, or report received). Never kill pre-existing agents, another coordinator's workers, or agents with uncommitted work.
+- Kill coordinator-owned agents only after work is safely recorded. For implementation roles: commit SHA must be visible in branch history AND worker-owned worktree clean with no uncommitted work. For read-only roles (review, investigation): report received suffices after confirming no mutation. Never kill pre-existing agents, another coordinator's workers, or agents with uncommitted work.
 
 ## Workflow
 
@@ -259,7 +262,7 @@ Use lightweight SDD only when workflow depth is SDD:
 
 `scope -> proposal -> spec -> tasks -> implementation -> independent verification -> PR`
 
-Maintain existing project docs. Create `STATUS.md` only for long/multi-worker/user-requested tasks; otherwise hcom events are enough. Direct mode is lean: no artifacts beyond WALKTHROUGH.md and DECISIONS.md on task branch.
+Maintain existing project docs. Create `STATUS.md` only for long/multi-worker/user-requested tasks; otherwise hcom events are enough. Direct mode is lean: no mandatory artifacts.
 
 See `references/sdd-workflow.md` for the full pipeline.
 
@@ -268,6 +271,6 @@ See `references/sdd-workflow.md` for the full pipeline.
 When user says `exit orchestrator`, `stop orquestrator`, or `normal mode`:
 
 1. Stop pure-delegation constraint.
-2. Verify work recorded (branch pushed, commit visible, or report received).
+2. Verify work recorded. For implementation roles: commit SHA must be visible in branch history AND worker-owned worktree clean with no uncommitted work. For read-only roles: final report received suffices after confirming no mutation.
 3. Clean up only coordinator-owned agents. Never kill pre-existing agents or agents with uncommitted work.
 4. Give final state and return to normal implementation mode.

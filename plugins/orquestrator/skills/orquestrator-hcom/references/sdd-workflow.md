@@ -39,18 +39,18 @@ scope → proposal → spec → tasks → implementation → independent verific
 4. **Tasks**: Split into atomic independent tasks with file ownership. Each task = one bounded unit.
 5. **Implementation**: Assign workers. Each worker owns specific files. No overlap.
 6. **Independent verification**: On completion signal, assign read-only reviewer (different from implementer). Event-driven: no idle between implement and verify.
-7. **PR**: Integrate only after review passes and repository checks pass.
+7. **PR**: Review findings are advisory evidence. Integrate only after coordinator or human resolves or explicitly accepts review evidence and repository checks pass. PASS is not merge approval.
 
 ## Conditional artifacts
 
 | Artifact | When |
 |----------|------|
-| **WALKTHROUGH.md** | Always (on task branch). |
-| **DECISIONS.md** | Always (on task branch). |
+| **WALKTHROUGH.md** | SDD workflow depth only, at repo-conventional task-scoped path (e.g., `docs/tasks/<thread>/WALKTHROUGH.md`). Coordinator assigns exactly one worker as documentation owner. |
+| **DECISIONS.md** | SDD workflow depth only, at repo-conventional task-scoped path (e.g., `docs/tasks/<thread>/DECISIONS.md`). Same documentation owner. |
 | **STATUS.md** | Only for long/multi-worker/user-requested tasks. |
 | **Spec/design docs** | Only for SDD workflow depth. |
 
-Direct mode is lean: no artifacts beyond WALKTHROUGH.md and DECISIONS.md on task branch.
+Direct mode is lean: no mandatory artifacts. Other workers send decisions/evidence to coordinator + doc owner via same HCOM thread, never edit shared files. Root-level project docs only if repo/user explicitly chooses and assigns one owner.
 
 ## Deliberation flow
 

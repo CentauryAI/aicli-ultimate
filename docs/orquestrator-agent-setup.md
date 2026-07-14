@@ -415,7 +415,7 @@ Understand repository policy and working-tree state first. Split work into bound
 - exact checks;
 - no overlap with another worker.
 
-Use lightweight specification-driven development only for large work:
+Use lightweight specification-driven development when the mode gate selects SDD:
 
 ```text
 scope -> proposal -> spec -> tasks -> implementation -> independent verification -> PR
