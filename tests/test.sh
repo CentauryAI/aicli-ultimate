@@ -837,7 +837,7 @@ for i, arg in enumerate(args):
     if arg == 'orquestrator':
         # Check next two args are description and LOCKED
         if i + 2 < len(args):
-            if 'HCOM Orquestrator mode — UPDATE' in args[i+1] and args[i+2] == 'LOCKED':
+            if args[i+1] == 'HCOM Orquestrator mode — UPDATE' and args[i+2] == 'LOCKED':
                 sys.exit(0)
 print("Triplet not found or not adjacent", file=sys.stderr)
 sys.exit(1)
