@@ -129,7 +129,7 @@ HCOM syntax changes between versions. The installed CLI is authoritative; the up
 2. Never guess a launch alias or flag. Run the selected tool's launch help, then use the exact syntax it lists: `hcom [N] <tool> [hcom flags] [tool arguments]`.
 3. Read the launch result. Use only names, tags, and batch identifiers HCOM actually returns; confirm readiness with the documented launch result or event command. Never use `sleep`.
 4. Refresh `hcom list --json` before assignment because names and status can change.
-5. Send a direct task with `hcom send @exact-name -- '<message>'`. Keep every HCOM flag before `--`; message text goes after it.
+5. Send a direct task with `hcom send @exact-name --intent request --thread <thread> -- '<message>'`. Keep every HCOM flag before `--`; message text goes after it.
 6. If a command fails validation, preserve the exact error, consult that command's help, and correct it from documented syntax. Do not improvise a replacement command.
 7. Include the same help-first rule in worker prompts when workers may call HCOM themselves.
 8. Clean up only coordinator-owned agents, using the exact names returned at launch and the cleanup command documented by local help.
@@ -161,7 +161,7 @@ See `references/handoff-protocol.md` for the per-task handoff template fields.
 Workers execute their own native commands (`/code-review`, `/debug`, and similar) when the delegation message names them:
 
 ```bash
-hcom send @worker -- 'run /code-review on branch <branch>; report findings as file:line.'
+hcom send @worker --intent request --thread <thread> -- 'run /code-review on branch <branch>; report findings as file:line.'
 ```
 
 Name a command only when the worker's tool documents it; when unsure, first ask the worker to list its available commands/skills. Never invent command names.
@@ -247,11 +247,14 @@ For CentauryAI repositories, obey protected-branch policy: `ai/<task>-<id>` bran
 ## Messaging
 
 ```bash
-hcom send @worker -- \
+hcom send @worker --intent request --thread <thread> -- \
   '任務：<bounded task>。文件：<paths>。驗收：<checks>。通信：凡 worker/orchestrator 消息，用 Caveman wenyan-ultra；code、commands、paths、identifiers、output、errors，逐字保之。失敗則逐字報之。'
 
-hcom send @reviewer -- \
+hcom send @reviewer --intent request --thread <thread> -- \
   '審 branch <branch>，準 <acceptance>。唯讀。通信：凡 worker/orchestrator 消息，用 Caveman wenyan-ultra；code、commands、paths、identifiers、output、errors，逐字保之。以 file:line 報疵。'
+
+hcom send @peer @coordinator --intent inform --thread <thread> -- \
+  'dependency state change: <detail>。通信：凡 worker/orchestrator 消息，用 Caveman wenyan-ultra；code、commands、paths、identifiers、output、errors，逐字保之。'
 ```
 
 Blocked after three real attempts: send exact attempts and error to coordinator. Do not loop.
