@@ -160,6 +160,7 @@ if command -v git >/dev/null 2>&1; then
   remove_git_include 'hasconfig:remote.*.url:ssh://git@github.com/CentauryAI/**' "$guard_config"
   remove_git_include 'hasconfig:remote.*.url:https://github.com/CentuaryAI/**' "$guard_config"
   remove_git_include 'hasconfig:remote.*.url:git@github.com:CentuaryAI/**' "$guard_config"
+  remove_git_include 'hasconfig:remote.*.url:ssh://git@github.com/CentuaryAI/**' "$guard_config"
 fi
 
 if command -v codex >/dev/null 2>&1; then
