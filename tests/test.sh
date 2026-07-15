@@ -49,6 +49,23 @@ XDG_CACHE_HOME="$TMP/status-home/.cache" \
 grep -q 'Codex' "$TMP/status.out"
 test ! -s "$TMP/status.err"
 
+# A racing cross-platform stat fallback must never feed text into arithmetic.
+rm -f "$TMP/status-bin/stat"
+printf '%s\n' '#!/bin/sh' 'test "$1" != "-c" || exit 1' \
+  'printf "  File: raced lock\\n"' >"$TMP/status-bin/stat"
+chmod +x "$TMP/status-bin/stat"
+PATH="$TMP/status-bin" \
+HOME="$TMP/status-home" \
+TMUX_PANE= \
+XDG_CONFIG_HOME="$TMP/status-home/.config" \
+XDG_CACHE_HOME="$TMP/status-home/.cache" \
+  /bin/bash "$ROOT/statusline/codex-powerline-status" 1 \
+  >"$TMP/status-stat-race.out" 2>"$TMP/status-stat-race.err"
+grep -q 'Codex' "$TMP/status-stat-race.out"
+test ! -s "$TMP/status-stat-race.err"
+rm -f "$TMP/status-bin/stat"
+ln -s "$(command -v stat)" "$TMP/status-bin/stat"
+
 # A killed renderer must not leave the Powerline cache frozen forever.
 status_cache="$TMP/status-home/.cache/aicli-ultimate/status-default"
 status_lock="$status_cache.lock"
