@@ -642,7 +642,7 @@ upsert_managed_block() {
 }
 
 copy_skill_source() {
-  local target="$1" source="$2" skill destination marker
+  local target="$1" source="$2" track="${3:-1}" skill destination marker
   for skill in "$source"/*; do
     [[ -d "$skill" ]] || continue
     destination="$target/$(basename "$skill")"
@@ -654,7 +654,9 @@ copy_skill_source() {
     rm -rf "$destination"
     cp -R "$skill" "$destination"
     touch "$marker"
-    printf '%s\n' "$destination" >>"$NEW_MANIFEST"
+    if [[ "$track" == 1 ]]; then
+      printf '%s\n' "$destination" >>"$NEW_MANIFEST"
+    fi
   done
 }
 
@@ -698,13 +700,26 @@ install_owned_file() {
 }
 
 copy_skill_set() {
-  local target="$1"
+  local target="$1" track="${2:-1}"
   mkdir -p "$target"
-  copy_skill_source "$target" "$ROOT/plugins/apollo-rust-best-practices/skills"
-  if [[ "$CAVEMAN" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/caveman/skills"; fi
-  if [[ "$PONYTAIL" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/ponytail/skills"; fi
-  if [[ "$CENTAURY" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/centaury-workflow/skills"; fi
-  if [[ "$ORQUESTRATOR" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/orquestrator/skills"; fi
+  copy_skill_source "$target" "$ROOT/plugins/apollo-rust-best-practices/skills" "$track"
+  if [[ "$CAVEMAN" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/caveman/skills" "$track"; fi
+  if [[ "$PONYTAIL" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/ponytail/skills" "$track"; fi
+  if [[ "$CENTAURY" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/centaury-workflow/skills" "$track"; fi
+  if [[ "$ORQUESTRATOR" == 1 ]]; then copy_skill_source "$target" "$ROOT/plugins/orquestrator/skills" "$track"; fi
+}
+
+remove_owned_skill_source() {
+  local target="$1" source="$2" skill installed tmp
+  for skill in "$source"/*; do
+    [[ -d "$skill" ]] || continue
+    installed="$target/$(basename "$skill")"
+    [[ -e "$installed/.aicli-ultimate-owned" ]] || continue
+    rm -rf "$installed"
+    tmp="$NEW_MANIFEST.tmp"
+    awk -v removed="$installed" '$0 != removed' "$NEW_MANIFEST" >"$tmp"
+    mv "$tmp" "$NEW_MANIFEST"
+  done
 }
 
 backup_skill_source() {
@@ -743,7 +758,7 @@ configure_antigravity() {
       "$ROOT/adapters/antigravity/mcp_config.json" >"$stage/mcp_config.json"
   fi
   cp "$CONFIG_HOME/global-instructions.md" "$stage/rules/global.md"
-  copy_skill_set "$stage/skills"
+  copy_skill_set "$stage/skills" 0
 
   if [[ "$OFFLINE" != 1 ]] && command -v agy >/dev/null 2>&1; then
     if ! agy plugin validate "$stage" >/dev/null; then
@@ -875,31 +890,30 @@ install_plugin() {
 }
 
 remove_owned_codex_plugins_for_shared_skills() {
-  local marker_dir="$CONFIG_HOME/native-plugins" marketplace_marker plugin marker plugin_list failed=0
+  local marker_dir="$CONFIG_HOME/native-plugins" marketplace_marker marketplace_owned=0
+  local plugin marker plugin_list failed=0 unowned=0
   marketplace_marker="$marker_dir/codex-marketplace-aicli-ultimate"
   plugin_list="$(codex plugin list 2>/dev/null || true)"
-  [[ -f "$marketplace_marker" ]] || {
-    if grep -Eq '^(caveman|ponytail|centaury-workflow|orquestrator|apollo-rust-best-practices)@aicli-ultimate[[:space:]]+installed' <<<"$plugin_list"; then
-      warn "Keeping unowned Codex plugins; duplicate bundled skills may remain until they are removed manually."
-    fi
-    return 0
-  }
+  [[ -f "$marketplace_marker" ]] && marketplace_owned=1
   for plugin in caveman ponytail centaury-workflow orquestrator apollo-rust-best-practices; do
     marker="$marker_dir/codex-$plugin"
-    [[ "$plugin" == apollo-rust-best-practices ]] \
-      && marker="$marker_dir/codex-apollo-rust-best-practices"
-    if grep -Eq "^$plugin@aicli-ultimate[[:space:]]+installed" <<<"$plugin_list"; then
+    if [[ -f "$marker" ]] \
+      && grep -Eq "^$plugin@aicli-ultimate[[:space:]]+installed" <<<"$plugin_list"; then
       if codex plugin remove "$plugin@aicli-ultimate"; then
         rm -f "$marker"
       else
         warn "Could not remove owned Codex plugin: $plugin@aicli-ultimate"
         failed=1
       fi
-    else
+    elif [[ -f "$marker" ]]; then
       rm -f "$marker"
+    elif grep -Eq "^$plugin@aicli-ultimate[[:space:]]+installed" <<<"$plugin_list"; then
+      unowned=1
     fi
   done
-  if [[ "$failed" == 0 ]]; then
+  [[ "$unowned" == 0 ]] \
+    || warn "Keeping unowned Codex plugins; duplicate bundled skills may remain until they are removed manually."
+  if [[ "$marketplace_owned" == 1 && "$failed" == 0 && "$unowned" == 0 ]]; then
     codex plugin marketplace remove aicli-ultimate \
       && rm -f "$marketplace_marker" \
       || warn "Could not remove the owned Codex marketplace."
@@ -998,12 +1012,12 @@ install_native_mode_plugins() {
     fi
   fi
 
-  if [[ "$TARGET_OMP" == 1 && "$PONYTAIL" == 1 ]] && command -v omp >/dev/null 2>&1 \
-    && ! omp_plugin_installed @dietrichgebert/ponytail; then
-    if omp plugin install @dietrichgebert/ponytail; then
-      touch "$marker_dir/omp-ponytail"
+  if [[ -f "$marker_dir/omp-ponytail" ]] && command -v omp >/dev/null 2>&1; then
+    if ! omp_plugin_installed @dietrichgebert/ponytail \
+      || omp plugin uninstall @dietrichgebert/ponytail; then
+      rm -f "$marker_dir/omp-ponytail"
     else
-      warn "Could not install Ponytail's native OMP plugin. Shared skills remain available."
+      warn "Could not remove AI CLI Ultimate's duplicate OMP Ponytail plugin."
     fi
   fi
 
@@ -1019,6 +1033,25 @@ install_native_mode_plugins() {
         || warn "Could not install Ponytail's Antigravity plugin. Shared skills remain available."
     fi
   fi
+}
+
+deduplicate_native_skills() {
+  local state antigravity="$HOME/.gemini/config/plugins/aicli-ultimate/skills"
+  if [[ "$TARGET_CLAUDE" == 1 ]]; then
+    state="$(claude_plugin_state caveman@caveman)"
+    [[ "$state" == enabled ]] \
+      && remove_owned_skill_source "$HOME/.claude/skills" "$ROOT/plugins/caveman/skills"
+    state="$(claude_plugin_state ponytail@ponytail)"
+    [[ "$state" == enabled ]] \
+      && remove_owned_skill_source "$HOME/.claude/skills" "$ROOT/plugins/ponytail/skills"
+  fi
+  if [[ "$TARGET_ANTIGRAVITY" == 1 && -e "$antigravity/../.aicli-ultimate-owned" ]]; then
+    antigravity_plugin_installed caveman \
+      && remove_owned_skill_source "$antigravity" "$ROOT/plugins/caveman/skills"
+    antigravity_plugin_installed ponytail \
+      && remove_owned_skill_source "$antigravity" "$ROOT/plugins/ponytail/skills"
+  fi
+  return 0
 }
 
 resolve_source
@@ -1385,11 +1418,10 @@ if [[ "$TARGET_OPENCODE" == 1 ]]; then
       "$CONFIG_HOME/opencode-lsp-permission-owned" \
       || warn "Keeping the existing OpenCode LSP permission."
   fi
-  if [[ "$PONYTAIL" == 1 ]]; then
-    if ! json_array_contains "$opencode_home/opencode.json" plugin '"@dietrichgebert/ponytail"'; then
-      python3 "$ROOT/scripts/json_array.py" add "$opencode_home/opencode.json" plugin '"@dietrichgebert/ponytail"'
-      touch "$CONFIG_HOME/opencode-ponytail-owned"
-    fi
+  if [[ -f "$CONFIG_HOME/opencode-ponytail-owned" ]]; then
+    python3 "$ROOT/scripts/json_array.py" remove \
+      "$opencode_home/opencode.json" plugin '"@dietrichgebert/ponytail"'
+    rm -f "$CONFIG_HOME/opencode-ponytail-owned"
   fi
   [[ "$STATUSLINE" == 1 ]] && configure_opencode_statusline "$opencode_home"
 fi
@@ -1421,6 +1453,7 @@ fi
 
 step "Native mode plugins"
 install_native_mode_plugins
+deduplicate_native_skills
 
 printf 'statusline=%s\nlsp=%s\ncaveman=%s\nponytail=%s\ncodex_skills=%s\n' \
   "$([[ "$CODEX_POWERLINE" == 1 ]] && printf enabled || printf disabled)" \

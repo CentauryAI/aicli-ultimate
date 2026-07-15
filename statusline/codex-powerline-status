@@ -3,13 +3,16 @@ set -u
 
 line="${1:-1}"
 pane="${2:-${TMUX_PANE:-}}"
+server="${3:-}"
 base="#1a1b26"
 cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/aicli-ultimate"
 config_root="${XDG_CONFIG_HOME:-$HOME/.config}/aicli-ultimate"
 mkdir -p "$cache_root"
-pane_key="${pane//[^a-zA-Z0-9]/_}"
+cache_identity="${server:+$server:}$pane"
+pane_key="${cache_identity//[^a-zA-Z0-9]/_}"
 cache="$cache_root/status-${pane_key:-default}"
 lock_dir="$cache.lock"
+owner_file="$lock_dir/owner"
 
 safe() {
   local value="${1//$'\n'/ }"
@@ -139,13 +142,40 @@ generate() {
 now=$(date +%s)
 modified=$(mtime "$cache")
 if (( now - modified >= 10 )); then
+  lock_modified=$(mtime "$lock_dir")
+  if [[ -d "$lock_dir" ]] && (( now - lock_modified >= 30 )); then
+    lock_owner="$(cat "$owner_file" 2>/dev/null || true)"
+    owner_pid="${lock_owner%%:*}"
+    if [[ ! "$owner_pid" =~ ^[0-9]+$ ]] || ! kill -0 "$owner_pid" 2>/dev/null; then
+      if [[ "$(cat "$owner_file" 2>/dev/null || true)" == "$lock_owner" ]]; then
+        rm -f "$owner_file"
+        if rmdir "$lock_dir" 2>/dev/null && [[ "$owner_pid" =~ ^[0-9]+$ ]]; then
+          rm -f "$cache.tmp.$owner_pid"
+        fi
+      fi
+    fi
+  fi
   if mkdir "$lock_dir" 2>/dev/null; then
+    lock_token="$$:$now:$RANDOM"
+    printf '%s\n' "$lock_token" >"$owner_file"
     tmp="$cache.tmp.$$"
+    cleanup_status_lock() {
+      [[ -n "${tmp:-}" ]] && rm -f "$tmp"
+      if [[ -n "${lock_token:-}" \
+        && "$(cat "$owner_file" 2>/dev/null || true)" == "$lock_token" ]]; then
+        rm -f "$owner_file"
+        rmdir "$lock_dir" 2>/dev/null || true
+      fi
+    }
+    trap cleanup_status_lock EXIT
     generate >"$tmp"
     mv "$tmp" "$cache"
-    rmdir "$lock_dir" 2>/dev/null || true
+    tmp=""
+    cleanup_status_lock
+    trap - EXIT
   elif [[ ! -r "$cache" ]]; then
-    generate >"$cache"
+    generate | sed -n "${line}p"
+    exit 0
   fi
 fi
 sed -n "${line}p" "$cache"
