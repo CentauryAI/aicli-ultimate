@@ -51,7 +51,12 @@ epoch_time() {
 }
 
 mtime() {
-  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || printf 0
+  local value
+  value="$(stat -c %Y "$1" 2>/dev/null)" \
+    || value="$(stat -f %m "$1" 2>/dev/null)" \
+    || value=0
+  [[ "$value" =~ ^[0-9]+$ ]] || value=0
+  printf '%s' "$value"
 }
 
 powerline() {
