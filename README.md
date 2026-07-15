@@ -94,10 +94,10 @@ The installer places an `aicli` helper in `~/.local/bin`:
 | CLI | Global rules | Skills/plugins | Extra configuration |
 |---|---|---|---|
 | Codex | `~/.codex/AGENTS.md` | bundled Codex marketplace | Rust, TypeScript, Python, and GitHub Markdown through the token-limited `mcpls` bridge; profile, agents, Midnight Blue, Powerline |
-| Claude Code | `~/.claude/CLAUDE.md` | personal skills + official Caveman/Ponytail/LSP plugins + bundled GitHub LSP plugin | Rust, TypeScript/JavaScript, Python, and GitHub Markdown LSP; lifecycle hooks, subagents, Powerline |
-| OpenCode | `~/.config/opencode/AGENTS.md` | shared skills + Ponytail server plugin | built-in Rust/TypeScript/Python LSP plus GitHub Markdown, subagents, Tokyo Night, native TUI plugin |
-| OMP | `~/AGENTS.md` | shared skills + Ponytail Pi plugin | lazy Rust/TypeScript/Python auto-detection plus GitHub Markdown, native full Powerline plus footer hook |
-| Antigravity CLI | global plugin rule | aggregate skills + official Caveman/Ponytail plugins | Rust, TypeScript, Python, and GitHub Markdown through the token-limited `mcpls` bridge; native extensions, command statusline |
+| Claude Code | `~/.claude/CLAUDE.md` | deduplicated personal skills + official Caveman/Ponytail/LSP plugins + bundled GitHub LSP plugin | Rust, TypeScript/JavaScript, Python, and GitHub Markdown LSP; lifecycle hooks, subagents, Powerline |
+| OpenCode | `~/.config/opencode/AGENTS.md` | shared portable skills | built-in Rust/TypeScript/Python LSP plus GitHub Markdown, subagents, Tokyo Night, native TUI plugin |
+| OMP | `~/AGENTS.md` | shared portable skills | lazy Rust/TypeScript/Python auto-detection plus GitHub Markdown, native full Powerline plus footer hook |
+| Antigravity CLI | global plugin rule | deduplicated aggregate skills + official Caveman/Ponytail plugins | Rust, TypeScript, Python, and GitHub Markdown through the token-limited `mcpls` bridge; native extensions, command statusline |
 
 Managed instruction blocks and JSON path updates preserve unrelated content. Existing statusline settings are backed up and restored by the uninstaller. Files and skill directories owned by another setup are never replaced.
 
@@ -185,7 +185,7 @@ The installer can also add official Superpowers and Codex Security, plus optiona
 
 Official Superpowers and Codex Security are Codex plugins rather than portable optional skills. Their availability and commands are defined by the installed curated plugin version.
 
-Claude plugins include their upstream `SessionStart`, `UserPromptSubmit`, and subagent hooks. OpenCode and OMP use Ponytail's official host adapters. Caveman has no upstream OpenCode or OMP lifecycle plugin, so those hosts use the same global always-on rule and portable skills instead of a fake compatibility layer. Existing native plugins are detected and preserved; uninstall removes or disables only integrations enabled by AI CLI Ultimate.
+Claude and Antigravity keep their upstream native Caveman/Ponytail hooks and omit matching portable copies. OpenCode and OMP use portable skills only, avoiding a second native copy of Ponytail. Existing unowned plugins are preserved; uninstall removes or disables only integrations enabled by AI CLI Ultimate.
 
 ## HCOM Orquestrator
 

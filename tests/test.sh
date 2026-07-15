@@ -35,18 +35,87 @@ test -x "$TMP/tmux-bin/tmux"
 
 # Optional metric tools must not disable or spam the Codex Powerline.
 mkdir -p "$TMP/status-bin" "$TMP/status-home/.config/aicli-ultimate"
-for command in awk date head mkdir mv rmdir sed stat tail tr wc; do
+for command in awk cat date head mkdir mv rm rmdir sed stat tail tr wc; do
   ln -s "$(command -v "$command")" "$TMP/status-bin/$command"
 done
 printf 'caveman=off\nponytail=off\n' >"$TMP/status-home/.config/aicli-ultimate/modes"
 PATH="$TMP/status-bin" \
 HOME="$TMP/status-home" \
+TMUX_PANE= \
 XDG_CONFIG_HOME="$TMP/status-home/.config" \
 XDG_CACHE_HOME="$TMP/status-home/.cache" \
   /bin/bash "$ROOT/statusline/codex-powerline-status" 1 \
   >"$TMP/status.out" 2>"$TMP/status.err"
 grep -q 'Codex' "$TMP/status.out"
 test ! -s "$TMP/status.err"
+
+# A killed renderer must not leave the Powerline cache frozen forever.
+status_cache="$TMP/status-home/.cache/aicli-ultimate/status-default"
+status_lock="$status_cache.lock"
+mkdir "$status_lock"
+printf 'stale\n' >"$status_cache"
+printf 'orphan\n' >"$status_cache.tmp.123"
+touch -t 200001010000 "$status_cache" "$status_lock" "$status_cache.tmp.123"
+PATH="$TMP/status-bin" \
+HOME="$TMP/status-home" \
+TMUX_PANE= \
+XDG_CONFIG_HOME="$TMP/status-home/.config" \
+XDG_CACHE_HOME="$TMP/status-home/.cache" \
+  /bin/bash "$ROOT/statusline/codex-powerline-status" 1 \
+  >"$TMP/status-recovered.out" 2>"$TMP/status-recovered.err"
+grep -q 'Codex' "$TMP/status-recovered.out"
+test ! -e "$status_lock"
+! grep -q '^stale$' "$status_cache"
+test ! -s "$TMP/status-recovered.err"
+rm -f "$status_cache.tmp.123"
+
+# An old lock still owned by a live renderer must not be reclaimed.
+mkdir "$status_lock"
+printf '%s\n' "$$:1:test" >"$status_lock/owner"
+printf 'active-lock\n' >"$status_cache"
+touch -t 200001010000 "$status_cache" "$status_lock"
+PATH="$TMP/status-bin" \
+HOME="$TMP/status-home" \
+TMUX_PANE= \
+XDG_CONFIG_HOME="$TMP/status-home/.config" \
+XDG_CACHE_HOME="$TMP/status-home/.cache" \
+  /bin/bash "$ROOT/statusline/codex-powerline-status" 1 \
+  >"$TMP/status-active-lock.out"
+grep -qx 'active-lock' "$TMP/status-active-lock.out"
+test -e "$status_lock/owner"
+rm -f "$status_lock/owner"
+rmdir "$status_lock"
+
+# Independent tmux servers commonly reuse pane %0; their caches must not.
+for server in server-one server-two; do
+  PATH="$TMP/status-bin" \
+  HOME="$TMP/status-home" \
+  TMUX_PANE= \
+  XDG_CONFIG_HOME="$TMP/status-home/.config" \
+  XDG_CACHE_HOME="$TMP/status-home/.cache" \
+    /bin/bash "$ROOT/statusline/codex-powerline-status" 1 '' "$server" >/dev/null
+done
+test -f "$TMP/status-home/.cache/aicli-ultimate/status-server_one_"
+test -f "$TMP/status-home/.cache/aicli-ultimate/status-server_two_"
+
+# Concurrent cold renders publish only complete cache files.
+rm -f "$status_cache"
+printf '%s\n' '#!/bin/sh' 'sleep 0.1' >"$TMP/status-bin/git"
+ln -s "$(command -v sleep)" "$TMP/status-bin/sleep"
+chmod +x "$TMP/status-bin/git"
+for line in 1 2 3; do
+  PATH="$TMP/status-bin" \
+  HOME="$TMP/status-home" \
+  TMUX_PANE= \
+  XDG_CONFIG_HOME="$TMP/status-home/.config" \
+  XDG_CACHE_HOME="$TMP/status-home/.cache" \
+    /bin/bash "$ROOT/statusline/codex-powerline-status" "$line" \
+    >"$TMP/status-cold-$line.out" &
+done
+wait
+for line in 1 2 3; do test -s "$TMP/status-cold-$line.out"; done
+test "$(wc -l <"$status_cache" | tr -d ' ')" = 3
+test ! -e "$status_lock"
 
 # Direct and HCOM-style PATH launches resolve the same Powerline wrapper.
 mkdir -p "$TMP/wrapper-home/.config/aicli-ultimate/codex-bin" \
@@ -249,6 +318,7 @@ test -x "$TMP/home/.local/bin/aicli-mcpls"
 test -x "$TMP/home/.local/bin/github-lsp"
 grep -Fxq "$TMP/home/.local/bin/aicli-mcpls" "$TMP/home/.config/aicli-ultimate/manifest.txt"
 grep -Fxq "$TMP/home/.local/bin/github-lsp" "$TMP/home/.config/aicli-ultimate/manifest.txt"
+! grep -q '/aicli-antigravity\.' "$TMP/home/.config/aicli-ultimate/manifest.txt"
 grep -q -- '--profile' "$TMP/home/.local/bin/aicli-ultimate"
 grep -q 'model_reasoning_effort = "xhigh"' "$TMP/home/.codex/aicli-ultimate.config.toml"
 grep -q '^theme = "custom"$' "$TMP/home/.codex/config.toml"
@@ -289,7 +359,7 @@ grep -q '"theme": "tokyonight"' "$TMP/home/.config/opencode/tui.json"
 grep -q '"existing-plugin"' "$TMP/home/.config/opencode/tui.json"
 jq -e '(.plugin | length) == 2 and (.plugin[1] | endswith("/aicli-ultimate/statusline.js"))' \
   "$TMP/home/.config/opencode/tui.json" >/dev/null
-jq -e '.plugin == ["existing-server-plugin", "@dietrichgebert/ponytail"]' \
+jq -e '.plugin == ["existing-server-plugin"]' \
   "$TMP/home/.config/opencode/opencode.json" >/dev/null
 jq -e '.lsp["github-lsp"].command == ["github-lsp"] and .permission.lsp == "allow"' \
   "$TMP/home/.config/opencode/opencode.json" >/dev/null
@@ -440,6 +510,7 @@ test -f "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
 grep -q 'app_bottom:' "$TMP/home/.config/opencode/aicli-ultimate/statusline.js"
 test -f "$TMP/home/.omp/agent/extensions/aicli-ultimate-statusline.ts"
 grep -q '^set -g status-interval 10$' "$TMP/home/.config/aicli-ultimate/tmux.conf"
+grep -Fq '#{q:socket_path}' "$TMP/home/.config/aicli-ultimate/tmux.conf"
 grep -q '^set -g mouse on$' "$TMP/home/.config/aicli-ultimate/tmux.conf"
 grep -q '^bind-key -T root WheelUpPane copy-mode -e$' "$TMP/home/.config/aicli-ultimate/tmux.conf"
 ! grep -q "alias opencode=" "$TMP/home/.bashrc"
@@ -582,7 +653,11 @@ jq -e '.plugin == ["@dietrichgebert/ponytail"] and .lsp == true and .permission.
 mkdir -p "$TMP/hcom-bin" "$TMP/hcom-home"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
-  'if [[ "${CODEX_LEGACY:-0}" == 1 && "$*" == "plugin list" ]]; then' \
+  'if [[ "${CODEX_HYBRID:-0}" == 1 && "$*" == "plugin list" ]]; then' \
+  '  printf "caveman@aicli-ultimate  installed\\nponytail@aicli-ultimate  installed\\n"' \
+  'elif [[ "${CODEX_HYBRID:-0}" == 1 && "$*" == "plugin marketplace list" ]]; then' \
+  '  printf "aicli-ultimate  installed\\n"' \
+  'elif [[ "${CODEX_LEGACY:-0}" == 1 && "$*" == "plugin list" ]]; then' \
   '  printf "caveman@aicli-ultimate  installed\\nponytail@aicli-ultimate  installed\\ncentaury-workflow@aicli-ultimate  installed\\norquestrator@aicli-ultimate  installed\\napollo-rust-best-practices@aicli-ultimate  installed\\n"' \
   'elif [[ "${CODEX_LEGACY:-0}" == 1 && "$*" == "plugin marketplace list" ]]; then' \
   '  printf "aicli-ultimate  installed\\n"' \
@@ -650,6 +725,28 @@ grep -Fq 'use `$orquestrator-hcom`' "$TMP/shared.out"
 grep -Fq '`/orchestration` is not a Codex command' "$TMP/shared.out"
 test ! -e "$TMP/shared-home/.hcom-called"
 
+# Individual ownership markers migrate even when marketplace predates AI CLI.
+mkdir -p "$TMP/hybrid-home/.config/aicli-ultimate/native-plugins"
+touch "$TMP/hybrid-home/.config/aicli-ultimate/native-plugins/codex-caveman"
+HCOM_TEST_LOG="$TMP/hybrid.log" \
+CODEX_HYBRID=1 \
+PATH="$TMP/hcom-bin:/usr/bin:/bin" \
+HOME="$TMP/hybrid-home" \
+XDG_CONFIG_HOME="$TMP/hybrid-home/.config" \
+CODEX_HOME="$TMP/hybrid-home/.codex" \
+AICLI_ULTIMATE_INSTALL_DIR="$TMP/hybrid-home/.local/share/aicli-ultimate" \
+AICLI_ULTIMATE_BIN_DIR="$TMP/hybrid-home/.local/bin" \
+AICLI_ULTIMATE_NONINTERACTIVE=1 \
+AICLI_ULTIMATE_LSP=0 \
+AICLI_ULTIMATE_TARGETS=codex,opencode \
+SHELL=/bin/bash \
+  "$ROOT/install.sh" >/dev/null 2>"$TMP/hybrid.err"
+grep -qx 'plugin remove caveman@aicli-ultimate' "$TMP/hybrid.log"
+! grep -qx 'plugin remove ponytail@aicli-ultimate' "$TMP/hybrid.log"
+! grep -qx 'plugin marketplace remove aicli-ultimate' "$TMP/hybrid.log"
+test ! -e "$TMP/hybrid-home/.config/aicli-ultimate/native-plugins/codex-caveman"
+grep -q 'Keeping unowned Codex plugins' "$TMP/hybrid.err"
+
 mkdir -p "$TMP/legacy-home/.config/aicli-ultimate/native-plugins"
 touch "$TMP/legacy-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
 HCOM_TEST_LOG="$TMP/legacy.log" \
@@ -664,12 +761,13 @@ AICLI_ULTIMATE_NONINTERACTIVE=1 \
 AICLI_ULTIMATE_LSP=0 \
 AICLI_ULTIMATE_TARGETS=codex,opencode \
 SHELL=/bin/bash \
-  "$ROOT/install.sh" >/dev/null
+  "$ROOT/install.sh" >/dev/null 2>"$TMP/legacy.err"
 for plugin in caveman ponytail centaury-workflow orquestrator apollo-rust-best-practices; do
-  grep -qx "plugin remove $plugin@aicli-ultimate" "$TMP/legacy.log"
+  ! grep -qx "plugin remove $plugin@aicli-ultimate" "$TMP/legacy.log"
 done
-grep -qx 'plugin marketplace remove aicli-ultimate' "$TMP/legacy.log"
-test ! -e "$TMP/legacy-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
+! grep -qx 'plugin marketplace remove aicli-ultimate' "$TMP/legacy.log"
+test -e "$TMP/legacy-home/.config/aicli-ultimate/native-plugins/codex-marketplace-aicli-ultimate"
+grep -q 'Keeping unowned Codex plugins' "$TMP/legacy.err"
 
 mkdir -p "$TMP/preinstalled-home"
 HCOM_TEST_LOG="$TMP/preinstalled.log" \
